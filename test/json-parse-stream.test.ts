@@ -12,6 +12,7 @@ import {
 } from 'https://deno.land/std@0.133.0/testing/asserts.ts'
 const { test } = Deno;
 
+import { jsonStringifyGenerator } from '../json-stringify.ts'
 import { JSONParseStream } from '../json-parse-stream.ts'
 
 async function consume(stream: ReadableStream) {
@@ -65,4 +66,25 @@ test('read all', async () => {
   assertEquals((await reader.read()).value, 3)
   assertEquals((await reader.read()).value, { c: 3 })
   assertEquals((await reader.read()).done, true)
+})
+
+const aJoin = async (iter: AsyncIterable<string>, separator = '') => {
+  const chunks: string[] = []
+  for await (const x of iter) chunks.push(x)
+  return chunks.join(separator)
+}
+
+test('promise value', async () => {
+  const parseStream = new JSONParseStream()
+  const actual = {
+    type: parseStream.promise('$.type'),
+    data: parseStream.generator('$.data.*')
+  }
+  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
+  const done = new Response(expected).body!
+    .pipeThrough(parseStream)
+    .pipeTo(new WritableStream())
+
+  assertEquals(await aJoin(jsonStringifyGenerator(actual)), expected)
+  await done;
 })
