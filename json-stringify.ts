@@ -4,9 +4,8 @@ import { asyncIterableToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-as
 type SeenWeakSet = WeakSet<any>;
 
 type Primitive = undefined | boolean | number | string | bigint | symbol;
-type ToJSON = { toJSON: (key?: any) => string }
-// type Awaitable<T> = T | Promise<T>;
-// type ForOfAwaitable<T> = Iterable<T> | AsyncIterable<T>;
+
+export type ToJSON = { toJSON: (key?: any) => string }
 
 const isIterable = <T>(x: unknown): x is Iterable<T> => 
   x != null && typeof x === 'object' && Symbol.iterator in x
@@ -43,9 +42,16 @@ export async function* jsonStringifyGenerator(
     yield ']'
   }
   else if (isPromiseLike(value)) {
-    safeAdd(seen, value)
-    yield* jsonStringifyGenerator(await value, seen)
-    seen.delete(value)
+    const v = await value
+    if (v !== undefined) {
+      safeAdd(seen, value)
+      yield* jsonStringifyGenerator(v, seen)
+      seen.delete(value)
+    }
+  }
+  else if (isToJSON(value)) {
+    const v = JSON.stringify(value);
+    if (v !== undefined) yield v
   }
   else if (Array.isArray(value)) {
     yield '['
@@ -58,18 +64,20 @@ export async function* jsonStringifyGenerator(
     seen.delete(value)
     yield ']'
   }
-  else if (isToJSON(value)) {
-    yield JSON.stringify(value)
-  }
   else if (value != null && typeof value === 'object') {
     yield '{'
     safeAdd(seen, value)
     let first = true;
     for (const [k, v] of Object.entries(value)) {
       if (v !== undefined) {
-        if (!first) yield ','; else first = false;
-        yield `${JSON.stringify(k)}:`
-        yield* jsonStringifyGenerator(v, seen);
+        const generator = jsonStringifyGenerator(v, seen)
+        const peek = await generator.next()
+        if (peek.value !== undefined) {
+          if (!first) yield ','; else first = false;
+          yield `${JSON.stringify(k)}:`
+          yield peek.value
+          yield* generator;
+        }
       }
     }
     seen.delete(value)

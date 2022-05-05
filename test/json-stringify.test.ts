@@ -60,3 +60,16 @@ test('duplicates do not throw', async () => {
   const a = { a: { x: foo, y: foo }, b: foo }
   assertEquals(await aJoin(jsonStringifyGenerator(a)), JSON.stringify(a))
 })
+
+test('promises that resolve to undefined are omitted', async () => {
+  assertEquals(await aJoin(jsonStringifyGenerator({ a: Promise.resolve(undefined) })), JSON.stringify({ a: undefined }))
+})
+
+test('undefined values in generators become null, same as arrays', async () => {
+  assertEquals(await aJoin(jsonStringifyGenerator({ a: asyncGen([1, undefined, 3]) })), JSON.stringify({ a: [1, undefined, 3] }))
+})
+
+test('undefined toJSON result', async () => {
+  const a = { toJSON() { return undefined } }
+  assertEquals(await aJoin(jsonStringifyGenerator({ a, b: 4 })), JSON.stringify({ a, b: 4 }))
+})
