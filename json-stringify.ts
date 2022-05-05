@@ -1,9 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { asyncIterableToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 
-// TODO: cycles!
-type VisitedWeakMap = WeakMap<any, string>;
-type VisitedWeakSet = WeakSet<any>;
+type SeenWeakSet = WeakSet<any>;
 
 type Primitive = undefined | boolean | number | string | bigint | symbol;
 type ToJSON = { toJSON: (key?: any) => string }
@@ -22,31 +20,42 @@ const isPromiseLike = <T>(x: unknown): x is PromiseLike<T> =>
 const isToJSON = <J extends ToJSON>(x: unknown): x is J =>
   x != null && typeof x === 'object' && 'toJSON' in x;
 
+const safeAdd = (seen: SeenWeakSet, value: any) => {
+  if (seen.has(value)) throw TypeError('Converting circular structure to JSON')
+  seen.add(value)
+}
+
 // TODO: Add replacer
 // TODO: add formatting/spaces
 export async function* jsonStringifyGenerator(
   value: null | Primitive | ToJSON | any[] | Record<string, any> | PromiseLike<any> | AsyncIterable<any> | ReadableStream,
-  level = 1,
+  seen: SeenWeakSet = new WeakSet(),
 ): AsyncIterableIterator<string> {
   if (isAsyncIterable(value)) {
     yield '['
+    safeAdd(seen, value)
     let first = true;
     for await (const v of value) {
       if (!first) yield ','; else first = false;
-      yield* jsonStringifyGenerator(v, level + 1)
+      yield* jsonStringifyGenerator(v, seen)
     }
+    seen.delete(value)
     yield ']'
   }
   else if (isPromiseLike(value)) {
-    yield* jsonStringifyGenerator(await value, level + 1)
+    safeAdd(seen, value)
+    yield* jsonStringifyGenerator(await value, seen)
+    seen.delete(value)
   }
   else if (Array.isArray(value)) {
     yield '['
+    safeAdd(seen, value)
     let first = true;
     for (const v of value) {
       if (!first) yield ','; else first = false;
-      yield* jsonStringifyGenerator(v, level + 1);
+      yield* jsonStringifyGenerator(v, seen);
     }
+    seen.delete(value)
     yield ']'
   }
   else if (isToJSON(value)) {
@@ -54,14 +63,16 @@ export async function* jsonStringifyGenerator(
   }
   else if (value != null && typeof value === 'object') {
     yield '{'
+    safeAdd(seen, value)
     let first = true;
     for (const [k, v] of Object.entries(value)) {
       if (v !== undefined) {
         if (!first) yield ','; else first = false;
         yield `${JSON.stringify(k)}:`
-        yield* jsonStringifyGenerator(v, level + 1);
+        yield* jsonStringifyGenerator(v, seen);
       }
     }
+    seen.delete(value)
     yield '}'
   }
   else {

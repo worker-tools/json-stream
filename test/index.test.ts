@@ -11,10 +11,9 @@ import {
 } from 'https://deno.land/std@0.133.0/testing/asserts.ts'
 const { test } = Deno;
 
-import { jsonStringifyStream, jsonStringifyGenerator } from '../index.ts'
+import { jsonStringifyGenerator } from '../index.ts'
 
 test('exists', () =>{
-  assertExists(jsonStringifyStream)
   assertExists(jsonStringifyGenerator)
 })
 
@@ -31,11 +30,6 @@ const aJoin = async (iter: AsyncIterable<string>, separator = '') => {
 }
 
 test('simple', async () => {
-  const stream = jsonStringifyStream({ a: 3, b: { nested: 4 }, c: [1, 2, 3], __x: undefined })
-  assertEquals(await new Response(stream).text(), JSON.stringify({ a: 3, b: { nested: 4 }, c: [1, 2, 3] }))
-})
-
-test('simple II', async () => {
   const text = await aJoin(jsonStringifyGenerator({ a: 3, b: { nested: 4 }, c: [1, 2, 3], __x: undefined }))
   assertEquals(text, JSON.stringify({ a: 3, b: { nested: 4 }, c: [1, 2, 3] }))
 })
@@ -53,4 +47,16 @@ async function* asyncGen<T>(xs: T[]) {
 test('with generator', async () => {
   const text = await aJoin(jsonStringifyGenerator({ a: 3, b: Promise.resolve(4), c: asyncGen([1, 2, 3]) }))
   assertEquals(text, JSON.stringify({ a: 3, b: 4, c: [1, 2, 3] }))
+})
+
+test('circular throws', () => {
+  const a: any = { a: 3, foo: { b: 4 } }
+  a.foo.a = a;
+  assertRejects(() => aJoin(jsonStringifyGenerator(a)), TypeError)
+})
+
+test('duplicates do not throw', async () => {
+  const foo = { foo: 'bar' }
+  const a = { a: { x: foo, y: foo }, b: foo }
+  assertEquals(await aJoin(jsonStringifyGenerator(a)), JSON.stringify(a))
 })
