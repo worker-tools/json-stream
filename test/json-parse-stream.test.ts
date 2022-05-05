@@ -1,4 +1,4 @@
-// deno-lint-ignore-file no-explicit-any no-unused-vars require-await
+// deno-lint-ignore-file no-explicit-any no-unused-vars require-await ban-unused-ignore
 import 'https://gist.githubusercontent.com/qwtel/b14f0f81e3a96189f7771f83ee113f64/raw/TestRequest.ts'
 import {
   assert,
@@ -78,7 +78,22 @@ test('promise value', async () => {
   const parseStream = new JSONParseStream()
   const actual = {
     type: parseStream.promise('$.type'),
-    data: parseStream.generator('$.data.*')
+    data: parseStream.iterable('$.data.*')
+  }
+  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
+  const done = new Response(expected).body!
+    .pipeThrough(parseStream)
+    .pipeTo(new WritableStream())
+
+  assertEquals(await aJoin(jsonStringifyGenerator(actual)), expected)
+  await done;
+})
+
+test('promise value II', async () => {
+  const parseStream = new JSONParseStream()
+  const actual = {
+    type: parseStream.promise('$.type'),
+    data: parseStream.stream('$.data.*')
   }
   const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
   const done = new Response(expected).body!

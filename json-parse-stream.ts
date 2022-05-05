@@ -55,21 +55,21 @@ export class JSONParseStream<T = any> extends TransformStream<string | BufferSou
     });
   }
 
-  promise<T>(jsonPath: string): Promise<T> {
+  promise<T = any>(jsonPath: string): Promise<T> {
     if (this.readable.locked) throw Error('Already locked')
     const p = new ResolvablePromise<T>()
     this.#promises.set(normalize(jsonPath), p);
-    return p;
+    return Promise.resolve(p);
   }
 
-  generator<T>(jsonPath: string): AsyncIterableIterator<T> {
+  iterable<T = any>(jsonPath: string): AsyncIterableIterator<T> {
     if (this.readable.locked) throw Error('Already locked')
     const q = new AsyncQueue<T>()
     this.#queues.set(normalize(jsonPath), q)
-    return q;
+    return identity(q);
   }
 
-  stream<T>(jsonPath: string): ReadableStream<T> {
-    return asyncIterToStream(this.generator(jsonPath));
+  stream<T = any>(jsonPath: string): ReadableStream<T> {
+    return asyncIterToStream(this.iterable(jsonPath));
   }
 }
