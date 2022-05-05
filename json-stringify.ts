@@ -7,7 +7,7 @@ type Primitive = undefined | boolean | number | string | bigint | symbol;
 
 export type ToJSON = { toJSON: (key?: any) => string }
 
-const isIterable = <T>(x: unknown): x is Iterable<T> => 
+const _isIterable = <T>(x: unknown): x is Iterable<T> => 
   x != null && typeof x === 'object' && Symbol.iterator in x
 
 const isAsyncIterable = <T>(x: unknown): x is AsyncIterable<T> => 
