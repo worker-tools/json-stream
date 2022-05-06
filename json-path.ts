@@ -1,4 +1,4 @@
-// deno-lint-ignore-file no-explicit-any
+// deno-lint-ignore-file no-explicit-any no-prototype-builtins
 
 // Modernized version of Stefan Goessner's original JSON Path implementation.
 // Copyright (c) 2007 Stefan Goessner (goessner.net)
