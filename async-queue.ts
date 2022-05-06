@@ -1,4 +1,7 @@
 // deno-lint-ignore-file
+
+// TODO: Move to separate module
+
 type Resolver<T> = (value: T | PromiseLike<T>) => void;
 type Rejecter = (reason?: any) => void;
 

@@ -2,7 +2,9 @@
 
 // Modernized version of Stefan Goessner's original JSON Path implementation.
 // Copyright (c) 2007 Stefan Goessner (goessner.net)
-// Licensed under the MIT (MIT-LICENSE.txt) licence.
+// Licensed under the MIT (licenses/MIT.md) license.
+
+// TODO: refactor to avoid string splitting/joining
 
 export function* trace<T = any>(expr: string, val: unknown, path: string): IterableIterator<[string, T]> {
   if (expr) {

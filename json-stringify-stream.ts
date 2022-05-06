@@ -9,10 +9,10 @@ export class JSONStringifyStream extends TransformStream<any, string> {
     super({
       start(controller) {
         first = true;
-        done = new ResolvablePromise();
         controller.enqueue('[')
       },
       async transform(obj, controller) {
+        done = new ResolvablePromise();
         try {
           for await (const chunk of jsonStringifyGenerator(obj)) {
             if (!first) controller.enqueue(','); else first = false;
@@ -30,6 +30,7 @@ export class JSONStringifyStream extends TransformStream<any, string> {
   }
 }
 
+/** @deprecated Untested */
 export class ND_JSONStringifyStream extends TransformStream<any, string> {
   constructor() {
     super({

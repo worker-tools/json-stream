@@ -1,9 +1,10 @@
 // deno-lint-ignore-file no-explicit-any
-import { JSONParser } from 'https://ghuc.cc/qwtel/jsonparse/index.js';
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
 import { asyncIterToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
+import { JSONParser } from './json-parser.js';
 import { normalize, match } from './json-path.ts'
 import { AsyncQueue } from './async-queue.ts';
+import { BinarySplitStream } from './split-stream.ts'
 
 async function* identity<T>(iter: Iterable<T> | AsyncIterable<T>) {
   for await (const x of iter) yield x;
@@ -12,7 +13,7 @@ async function* identity<T>(iter: Iterable<T> | AsyncIterable<T>) {
 /**
  * 
  */
-export class JSONParseStream<T = any> extends TransformStream<string | BufferSource, T> {
+export class JSONParseStream<T = any> extends TransformStream<string | Uint8Array, T> {
   #promises: Map<string, ResolvablePromise<any>> = new Map()
   #queues: Map<string, AsyncQueue<any>> = new Map()
 
@@ -71,5 +72,37 @@ export class JSONParseStream<T = any> extends TransformStream<string | BufferSou
 
   stream<T = any>(jsonPath: string): ReadableStream<T> {
     return asyncIterToStream(this.iterable(jsonPath));
+  }
+}
+
+/** @deprecated Untested */
+export class ND_JSONParseStream<T = any> extends TransformStream<Uint8Array, T> {
+  constructor() {
+    let splitStream: BinarySplitStream;
+    let writer: WritableStreamDefaultWriter;
+    let decoder: TextDecoder;
+    super({
+      start(controller) {
+        splitStream = new BinarySplitStream()
+        writer = splitStream.writable.getWriter();
+        decoder = new TextDecoder();
+        (async () => {
+          try {
+            for await (const line of splitStream.readable) {
+              const sLine = decoder.decode(line).trim()
+              if (sLine) controller.enqueue(JSON.parse(sLine))
+            }
+          } catch (err) {
+            writer.abort(err)
+          }
+        })()
+      },
+      transform(chunk) {
+        writer.write(chunk)
+      },
+      flush() {
+        writer.close()
+      },
+    })
   }
 }
