@@ -1,5 +1,9 @@
 // deno-lint-ignore-file
 
+// Based on node.js event utility: <https://github.com/nodejs/node/blob/5b59e14dafb43b907e711cb418bb9c302bce2890/lib/events.js#L1017>
+// Copyright Joyent, Inc. and other Node contributors.
+// Licensed under the MIT license
+
 // TODO: Move to separate module
 
 type Resolver<T> = (value: T | PromiseLike<T>) => void;
@@ -16,9 +20,6 @@ export interface AsyncQueueOptions {
   signal?: AbortSignal,
 }
 
-/**
- * Based on: <https://github.com/nodejs/node/blob/5b59e14dafb43b907e711cb418bb9c302bce2890/lib/events.js#L1017>
- */
 export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
   #unconsumedValues: T[] = [];
   #unconsumedPromises: { resolve: Resolver<IteratorResult<T, void>>, reject: Rejecter }[] = [];

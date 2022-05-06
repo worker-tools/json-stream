@@ -2,7 +2,7 @@
 
 // Modernized version of Stefan Goessner's original JSON Path implementation.
 // Copyright (c) 2007 Stefan Goessner (goessner.net)
-// Licensed under the MIT (licenses/MIT.md) license.
+// Licensed under the MIT license.
 
 // TODO: refactor to avoid string splitting/joining
 
