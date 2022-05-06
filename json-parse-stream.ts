@@ -51,12 +51,15 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
         parser.write(chunk);
       },
       flush: async () => {
-        await Promise.all([...this.#queues.values()].map(q => q.return()))
+        await Promise.all([
+          ...[...this.#promises.values()].map(q => q.resolve(undefined)),
+          ...[...this.#queues.values()].map(q => q.return()),
+        ])
       },
     });
   }
 
-  promise<T = any>(jsonPath: string): Promise<T> {
+  promise<T = any>(jsonPath: string): Promise<T | undefined> {
     if (this.readable.locked) throw Error('Already locked')
     const p = new ResolvablePromise<T>()
     this.#promises.set(normalize(jsonPath), p);
