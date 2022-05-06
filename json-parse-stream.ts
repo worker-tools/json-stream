@@ -18,30 +18,30 @@ export class JSONParseStream<T = any> extends TransformStream<string | BufferSou
 
   constructor(jsonPath = '$.*') {
     let parser!: JSONParser;
-    const matchNPath = normalize(jsonPath)
+    const expr = normalize(jsonPath)
     super({
       start: (controller) => {
         parser = new JSONParser();
         parser.onValue = (value: T) => {
           const path = [...parser.stack.map(_ => _.key), parser.key]; // TODO: modify parser to provide key efficiently
           path[0] ||= '$';
-
           const nPath = normalize(path.join('.')); // FIXME: avoid string concatenation/joining
-          if (match(matchNPath, nPath)) { 
+
+          if (match(expr, nPath)) { 
             controller.enqueue(value);
           }
 
           // FIXME: use trie for better performance!?
-          for (const matchNPath of this.#promises.keys()) {
-            if (match(matchNPath, nPath)) {
-              this.#promises.get(matchNPath)!.resolve(value)
-              this.#promises.delete(matchNPath);
+          for (const expr of this.#promises.keys()) {
+            if (match(expr, nPath)) {
+              this.#promises.get(expr)!.resolve(value)
+              this.#promises.delete(expr);
             }
           }
 
-          for (const matchNPath of this.#queues.keys()) {
-            if (match(matchNPath, nPath)) {
-              this.#queues.get(matchNPath)!.push(value)
+          for (const expr of this.#queues.keys()) {
+            if (match(expr, nPath)) {
+              this.#queues.get(expr)!.push(value)
             }
           }
         };

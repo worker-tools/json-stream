@@ -31,12 +31,6 @@ export function* trace<T = any>(expr: string, val: unknown, path: string): Itera
     else if (/^(-?[0-9]*):(-?[0-9]*):?([0-9]*)$/.test(loc)) { // [start:end:step] slice syntax
       yield* slice(loc, x, val, path);
     }
-    // eval is bad, not doing this anymore
-    // else if (/^\(.*?\)$/.test(loc)) { // [(expr)]
-    //   trace(eval(loc, val, path.substr(path.lastIndexOf(";") + 1)) + ";" + x, val, path);
-    // } else if (/^\?\(.*?\)$/.test(loc)) { // [?(expr)]
-    //   walk(loc, x, val, path, (m, l, x, v, p) => { if (eval(l.replace(/^\?\((.*?)\)$/, "$1"), v[m], m)) trace(m + ";" + x, v, p); });
-    // }
   }
   else yield [path, val as T]
 }
