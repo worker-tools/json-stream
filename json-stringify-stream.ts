@@ -33,15 +33,3 @@ export class JSONStringifyStream extends TransformStream<any, string> {
     })
   }
 }
-
-/** @deprecated Untested */
-export class ND_JSONStringifyStream extends TransformStream<any, string> {
-  constructor() {
-    super({
-      transform(obj, controller) {
-        controller.enqueue(JSON.stringify(obj))
-        controller.enqueue('\n')
-      },
-    })
-  }
-}

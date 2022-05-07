@@ -96,35 +96,3 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
     return streamToAsyncIter(this.stream(jsonPath))
   }
 }
-
-/** @deprecated Untested */
-export class ND_JSONParseStream<T = any> extends TransformStream<Uint8Array, T> {
-  constructor() {
-    let splitStream: BinarySplitStream;
-    let writer: WritableStreamDefaultWriter;
-    let decoder: TextDecoder;
-    super({
-      start(controller) {
-        splitStream = new BinarySplitStream()
-        writer = splitStream.writable.getWriter();
-        decoder = new TextDecoder();
-        (async () => {
-          try {
-            for await (const line of streamToAsyncIter(splitStream.readable)) {
-              const sLine = decoder.decode(line).trim()
-              if (sLine) controller.enqueue(JSON.parse(sLine))
-            }
-          } catch (err) {
-            writer.abort(err)
-          }
-        })()
-      },
-      transform(chunk) {
-        writer.write(chunk)
-      },
-      flush() {
-        writer.close()
-      },
-    })
-  }
-}
