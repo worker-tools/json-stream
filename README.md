@@ -36,7 +36,6 @@ await fetch('/endpoint.json', {
 // On the server side:
 const collected = [];
 await stream
-  .pipeThrough(new TextDecoderStream())
   .pipeThrough(new JSONParseStream())
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 
@@ -51,7 +50,7 @@ For example this is just as valid:
 const collected = await new Response(stream).json()
 ```
 
-If on the other hand ND-JSON is sufficient for your use case, this module also provides `ND_JSONStringifyStream` and `ND_JSONParseStream` that work the same way as shown above, but lack the following features (TODO: move to separate module?).
+If on the other hand ND-JSON is sufficient for your use case, this module also provides `NDJSONStringifyStream` and `NDJSONParseStream` that work the same way as shown above, but lack the following features (TODO: move to separate module?).
 
 ## Using JSON Path to locate nested data 
 __JSON Stream__ also supports more complex use cases. Assume JSON of the following structure:
@@ -76,7 +75,7 @@ However, the constructor accepts a JSONPath-like string to locate the desired da
 
 ```js
 const collected = [];
-await fetch('/nested.json').body
+await (await fetch('/nested.json')).body
   .pipeThrough(new JSONParseStream('$.items.*')) // <-- new
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
@@ -111,11 +110,11 @@ const asyncData = {
   type: jsonStream.promise('$.type'),
   items: jsonStream.stream('$.items.*'),
 }
-fetch('/nested.json').body
-  .pipeThrough(jsonStream)
-  .pipeTo(new WritableStream({}))
+(await fetch('/nested.json').body)
+  .pipeThrough(jsonStream) 
+  // no .pipeTo required
 
-console.log(await asyncData.type) // "foo"
+assertEquals(await asyncData.type, 'foo')
 
 // We can collect the values as before:
 const collected = [];

@@ -16,6 +16,12 @@ import { JSONStringifyStream } from '../json-stringify-stream.ts'
 import { JSONParseStream } from '../json-parse-stream.ts'
 import { jsonStringifyStream } from '../json-stringify.ts'
 
+const collect = async <T>(stream: ReadableStream<T>) => {
+  const collected: T[] = [];
+  await stream.pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
+  return collected;
+}
+
 function toReadableStream<T>(iter: Iterable<T>) {
   const data = [...iter];
   let v: T | undefined;
@@ -34,10 +40,9 @@ test('stringify stream', async () => {
     'foo', 
     { a: { nested: { object: true }} }
   ];
-  const chunks: string[] = []
-  await toReadableStream(expected)
+  const chunks = await collect(toReadableStream(expected)
     .pipeThrough(new JSONStringifyStream())
-    .pipeTo(new WritableStream({ write(chunk) { chunks.push(chunk) }}))
+  );
   const actual = JSON.parse(chunks.join(''))
   assertEquals(actual, expected)
 })
@@ -54,14 +59,38 @@ test('roundtrip', async () => {
     .pipeThrough(new JSONStringifyStream())
     .pipeThrough(new TextEncoderStream())
   
-  const actual: any[] = [];
-  await body
-    .pipeThrough(new TextDecoderStream())
-    .pipeThrough(new JSONParseStream())
-    .pipeTo(new WritableStream({ write(obj) { actual.push(obj) }}))
+  const actual = await collect(body.pipeThrough(new JSONParseStream()))
   
   assertEquals(expected, actual)
 
+})
+
+test('Retrieving multiple values and collections', async () => {
+  const jsonStream = new JSONParseStream();
+  const asyncData = {
+    type: jsonStream.promise('$.type'),
+    items: jsonStream.stream('$.items.*'),
+  };
+
+  const nested = {
+    type: "foo",
+    items: [
+      { "a": 1 }, 
+      { "b": 2 }, 
+      { "c": 3 }, 
+      { "zzz": 999 }, 
+    ]
+  };
+
+  new Response(JSON.stringify(nested)).body!
+    .pipeThrough(jsonStream) 
+
+  assertEquals(await asyncData.type, 'foo')
+
+  // We can collect the values as before:
+  const collected = await collect(asyncData.items)
+
+  assertEquals(collected, nested.items)
 })
 
 // test('foo', async () => {

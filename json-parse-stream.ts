@@ -21,7 +21,7 @@ const mkPath = (parser: any) => {
  */
 export class JSONParseStream<T = any> extends TransformStream<string | Uint8Array, T> {
   #pathMap = new Map<any, string>(); // FIXME: clear!
-  #streams = new Map<string, ReadableStream<unknown>>();
+  // #streams = new Map<string, ReadableStream<unknown>>();
   #jsonPath;
 
   constructor(jsonPath = '$.*') {
@@ -51,6 +51,11 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
         const path = this.#pathMap.get(value)!
         if (match(expr, path)) {
           controller.enqueue(value as any);
+        } 
+        // Closing the stream early when the selected path can no longer yield values
+        else if (expr.startsWith(path)) {
+          controller.terminate()
+          // this.#streams.delete(expr) // no longer need to track the stream
         }
       }
     })
@@ -75,7 +80,7 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
   async promise<T = any>(jsonPath: string): Promise<T | undefined> {
     const expr = normalize(jsonPath)
     const stream = this.#clone().pipeThrough(this.#filterStream(expr))
-    this.#streams.set(expr, stream)
+    // this.#streams.set(expr, stream)
     const { done, value } = await stream.getReader().read();
     return done ? undefined : value;
   }
@@ -83,7 +88,7 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
   stream<T = any>(jsonPath: string): ReadableStream<T> {
     const expr = normalize(jsonPath)
     const stream = this.#clone().pipeThrough(this.#filterStream(expr))
-    this.#streams.set(expr, stream)
+    // this.#streams.set(expr, stream)
     return stream;
   }
 
