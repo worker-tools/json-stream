@@ -1,12 +1,19 @@
 // deno-lint-ignore-file no-explicit-any
 
+export interface NDJSONStringifyStreamOptions {
+  fatal?: boolean
+}
+
 /** @deprecated Untested */
 export class NDJSONStringifyStream extends TransformStream<any, string> {
-  constructor() {
+  constructor(opts: NDJSONStringifyStreamOptions = {}) {
     super({
       transform(obj, controller) {
-        controller.enqueue(JSON.stringify(obj))
-        controller.enqueue('\n')
+        try {
+          controller.enqueue(JSON.stringify(obj) + '\n')
+        } catch (err) {
+          if (opts.fatal) controller.error(err)
+        }
       },
     })
   }

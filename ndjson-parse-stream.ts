@@ -1,33 +1,40 @@
 // deno-lint-ignore-file no-explicit-any
-import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 import { BinarySplitStream } from './split-stream.ts'
+
+export interface NDJSONParseStreamOptions {
+  fatal?: boolean
+}
 
 /** @deprecated Untested */
 export class NDJSONParseStream<T = any> extends TransformStream<Uint8Array, T> {
-  constructor() {
-    let splitStream: BinarySplitStream;
+  constructor(opts: NDJSONParseStreamOptions = {}) {
     let writer: WritableStreamDefaultWriter;
-    let decoder: TextDecoder;
     super({
       start(controller) {
-        splitStream = new BinarySplitStream()
+        let decoder: TextDecoder;
+        const splitStream = new BinarySplitStream()
         writer = splitStream.writable.getWriter();
-        decoder = new TextDecoder();
-        (async () => {
-          try {
-            for await (const line of streamToAsyncIter(splitStream.readable)) {
-              const sLine = decoder.decode(line).trim()
-              if (sLine) controller.enqueue(JSON.parse(sLine))
+        splitStream.readable.pipeTo(new WritableStream({
+          start() {
+            decoder = new TextDecoder();
+          },
+          write(line) {
+            const sLine = decoder.decode(line).trim()
+            if (sLine) {
+              try {
+                controller.enqueue(JSON.parse(sLine))
+              } catch (err) {
+                if (opts.fatal) controller.error(err)
+              }
             }
-          } catch (err) {
-            writer.abort(err)
-          }
-        })()
+          },
+        })).catch(err => controller.error(err));
       },
       transform(chunk) {
         writer.write(chunk)
       },
       flush() {
+        // TODO: this is not right...
         writer.close()
       },
     })
