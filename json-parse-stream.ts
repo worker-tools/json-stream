@@ -45,13 +45,12 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
 }
 
 export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Array> {
-  #pathMap = new Map<any, string>(); // FIXME: clear when processing is done!?
-  #readable: ReadableStream<T>;
+  #readable: ReadableStream<[string, T]>;
   // #streams = new Map<string, ReadableStream<unknown>>();
 
   constructor() {
     let parser: JSONParser;
-    let readable: ReadableStream<T>
+    let readable: ReadableStream<[string, T]>
     super({
       start: (writeCtrl) => {
         parser = new JSONParser();
@@ -59,10 +58,7 @@ export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Arr
           start: (readCtrl) => {
             parser.onValue = (value: T) => {
               const path = mkPath(parser)
-
-              // FIXME: better solution?
-              this.#pathMap.set(value, path);
-              readCtrl.enqueue(value);
+              readCtrl.enqueue([path, value]);
             };
           },
         })
@@ -76,8 +72,7 @@ export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Arr
 
   #filterStream(expr: string) {
     return new TransformStream({
-      transform: (value, controller) => {
-        const path = this.#pathMap.get(value)!
+      transform: ([path, value], controller) => {
         if (match(expr, path)) {
           controller.enqueue(value as any);
         } 
@@ -90,7 +85,8 @@ export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Arr
     })
   }
 
-  get readable(): ReadableStream<T> {
+  /** @deprecated should this be exposed? */
+  get readable(): ReadableStream<[string, T]> {
     return this.#readable
   }
 
