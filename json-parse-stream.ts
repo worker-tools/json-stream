@@ -3,7 +3,7 @@ import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-
 import { JSONParser } from './json-parser.js';
 import { normalize, match } from './json-path.ts'
 // import { AsyncQueue } from './async-queue.ts';
-import { BinarySplitStream } from './split-stream.ts'
+// import { BinarySplitStream } from './split-stream.ts'
 
 async function* _identity<T>(iter: Iterable<T> | AsyncIterable<T>) {
   for await (const x of iter) yield x;
@@ -20,9 +20,9 @@ const mkPath = (parser: any) => {
  * 
  */
 export class JSONParseStream<T = any> extends TransformStream<string | Uint8Array, T> {
-  #pathMap = new Map<any, string>(); // FIXME: clear!
-  // #streams = new Map<string, ReadableStream<unknown>>();
+  #pathMap = new Map<any, string>(); // FIXME: clear when processing is done!?
   #jsonPath;
+  // #streams = new Map<string, ReadableStream<unknown>>();
 
   constructor(jsonPath = '$.*') {
     let parser!: JSONParser;
@@ -52,7 +52,7 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
         if (match(expr, path)) {
           controller.enqueue(value as any);
         } 
-        // Closing the stream early when the selected path can no longer yield values
+        // Closing the stream early when the selected path can no longer yield values.
         else if (expr.startsWith(path)) {
           controller.terminate()
           // this.#streams.delete(expr) // no longer need to track the stream
