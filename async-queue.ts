@@ -68,7 +68,7 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
   // TODO: does it make sense/is it possible to add `shift` / `pop`??
 
   /** Alias for `next` */
-  unshift(): Promise<IteratorResult<T, void>> {
+  shift(): Promise<IteratorResult<T, void>> {
     return this.next();
   }
 

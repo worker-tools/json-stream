@@ -26,6 +26,9 @@ const safeAdd = (seen: SeenWeakSet, value: any) => {
 
 // TODO: Add replacer
 // TODO: add formatting/spaces
+/**
+ * @deprecated Change name to something more descriptive!? 
+ */
 export async function* jsonStringifyGenerator(
   value: null | Primitive | ToJSON | any[] | Record<string, any> | PromiseLike<any> | AsyncIterable<any> | ReadableStream,
   seen: SeenWeakSet = new WeakSet(),
@@ -88,6 +91,9 @@ export async function* jsonStringifyGenerator(
   }
 }
 
+/**
+ * @deprecated Change name to something more descriptive!? 
+ */
 export function jsonStringifyStream(
   value: null | Primitive | ToJSON | any[] | Record<string, any> | PromiseLike<any> | AsyncIterable<any> | ReadableStream,
 ): ReadableStream<string> {

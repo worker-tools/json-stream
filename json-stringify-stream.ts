@@ -1,29 +1,33 @@
 // deno-lint-ignore-file no-explicit-any
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts'
+import { ExtendablePromise } from 'https://ghuc.cc/worker-tools/extendable-promise/index.ts'
 import { jsonStringifyGenerator } from './json-stringify.ts'
 
 export class JSONStringifyStream extends TransformStream<any, string> {
   constructor() {
     let first: boolean;
-    let done: ResolvablePromise<void>;
+    let flushed: ResolvablePromise<void>;
+    let done: ExtendablePromise<void>;
     super({
       start(controller) {
         first = true;
+        flushed = new ResolvablePromise();
+        done = new ExtendablePromise(flushed); 
         controller.enqueue('[')
       },
-      async transform(obj, controller) {
-        done = new ResolvablePromise();
-        try {
+      transform(obj, controller) {
+        if (!first) controller.enqueue(','); else first = false;
+        const p = (async () => {
           for await (const chunk of jsonStringifyGenerator(obj)) {
-            if (!first) controller.enqueue(','); else first = false;
             controller.enqueue(chunk)
           }
-        } finally {
-          done.resolve()
-        }
+        })()
+        done.waitUntil(p)
+        return p;
       },
       async flush(controller) {
-        await done; // FIXME: good idea?
+        flushed.resolve();
+        await done; // FIXME: is this even necessary?
         controller.enqueue(']')
       }
     })
@@ -34,11 +38,9 @@ export class JSONStringifyStream extends TransformStream<any, string> {
 export class ND_JSONStringifyStream extends TransformStream<any, string> {
   constructor() {
     super({
-      async transform(obj, controller) {
-        for await (const chunk of jsonStringifyGenerator(obj)) {
-          controller.enqueue(chunk)
-          controller.enqueue('\n')
-        }
+      transform(obj, controller) {
+        controller.enqueue(JSON.stringify(obj))
+        controller.enqueue('\n')
       },
     })
   }

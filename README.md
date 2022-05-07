@@ -1,9 +1,211 @@
 # JSON Stream
 
-Utilities for working with streaming JSON in Worker Environments.
+Utilities for working with streaming JSON in Worker Environments such as Cloudflare Workers, Deno Deploy and Service Workers.
 
 ***
 
-__Work in Progress__: Anything might change. Undocumented and largely untested.
+__Work in Progress__: Anything might change
 
 ***
+
+## Base Case
+The most basic use case is turning a stream of objects into stream of strings that can be sent over the wire.
+On the other end, it can be turned back into a stream of JSON objects. 
+For this `JSONStringifyStream` and `JSONParseStream` are all that is required. 
+They work practically the same as `TextEncoderStream` and `TextDecoderStream`:
+
+```js
+const data = [
+  { a: 1 }, 
+  { b: 2}, 
+  { c: 3 }, 
+  'foo', 
+  { a: { nested: { object: true }} }
+];
+const stream = toReadableStream(data)
+  .pipeThrough(new JSONStringifyStream())
+  .pipeThrough(new TextEncoderStream())
+
+// Usage e.g.:
+await fetch('/endpoint.json', { 
+  body: stream, 
+  method: 'POST', 
+  headers: [['content-type', 'application/json']] 
+})
+
+// On the server side:
+const collected = [];
+await stream
+  .pipeThrough(new TextDecoderStream())
+  .pipeThrough(new JSONParseStream())
+  .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
+
+assertEquals(data, collected)
+```
+
+Note that standard JSON is used as the transport format. Unlike ND-JSON, 
+neither side needs to opt-in using the streaming parser/stringifier to accept data. 
+For example this is just as valid:
+
+```js
+const collected = await new Response(stream).json()
+```
+
+If on the other hand ND-JSON is sufficient for your use case, this module also provides `ND_JSONStringifyStream` and `ND_JSONParseStream` that work the same way as shown above, but lack the following features (TODO: move to separate module?).
+
+## Using JSON Path to locate nested data 
+__JSON Stream__ also supports more complex use cases. Assume JSON of the following structure:
+
+```jsonc
+// filename: "nested.json"
+{
+  "type": "foo",
+  "data": [
+    { "a": 1 }, 
+    { "b": 2 }, 
+    { "c": 3 }, 
+    // ...
+    { "zzz": 999 }, 
+  ]
+}
+```
+
+Here, the example code from above wouldn't work (or at least not as you would expect), 
+because by default `JSONParseStream` emits the objects that are the immediate children of the root object. 
+However, the constructor accepts a JSONPath-like string to locate the desired data to parse:
+
+```js
+const collected = [];
+await fetch('/nested.json').body
+  .pipeThrough(new JSONParseStream('$.data.*')) // <-- new
+  .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
+```
+
+It's important to add a `.*` at the end, but the `$` can be omitted. 
+
+`JSONParseStream` only supports a subset of JSONPath, specifically eval (`@`) expressions and negative slices are not supported.
+
+| JSONPath                  | Description                                                 |
+|:--------------------------|:------------------------------------------------------------|
+| `$.*`                     | All direct children of the root. Default.                   |
+| `$.store.book[*].author`  | The authors of all books in the store                       |
+| `$..author`               | All authors                                                 |
+| `$.store.*`               | All things in store, which are some books and a red bicycle |
+| `$.store..price`          | The price of everything in the store                        |
+| `$..book[2]`              | The third book                                              |
+| `$..book[0,1]`            | The first two books via subscript union                     |
+| `$..book[:2]`             | The first two books via subscript array slice               |
+| `$..*`                    | All members of JSON structure                               |
+
+<!-- (The JSONPath argument can also be used to receive every parsed value as they arrive by using `$..*`) -->
+
+## Retrieving multiple values and collections
+By providing a JSON Path to the constructor we can retrive the values of a single, nested array. 
+However, we lose access to the `type` value, and we would also have trouble with more than one array.
+For this these scenarios `JSONParseStream` provides the `promise` and `iterable`/`stream` methods that return one or multiple values respectively: It's best to explain by example. Assuming the data structure from above, we have:
+
+```js
+const jsonStream = new JSONParseStream();
+const asyncData = {
+  type: jsonStream.promise('$.type')
+  data: jsonStream.stream('$.data.*')
+}
+await fetch('/nested.json').body
+  .pipeThrough(jsonStream)
+  .pipeTo(new WritableStream({}))
+
+console.log(await asyncData.type) // "foo"
+
+// We can collect the values as before:
+const collected = [];
+await asyncData.data
+  .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
+```
+
+Note that this feature can be a bit tricky to use. Internally, `.stream` and `.iterable` are queued and filled up at the speed of `pipeTo`, which in this example is unconstrained. A future version of this library could remedy this.
+
+Note that `.promise` might resolve with `undefined` if the corresponding is not found in the stream.
+
+## Streaming Complex Data
+You might also be interested in how to stream complex data such as the one above from memory.
+In that case `JSONStringifyStream` isn't too helpful, as it only supports JSON arrays (i.e. the root element is an array `[]`). 
+
+For that case __JSON Stream__ provides the `jsonStringifyStream` method (TODO: better name to indicate that it is a readableStream? Change to ReadableStream subclass? Export `JSONStream` object with `stringify` method?) which accepts any JSON-ifiable data as argument. It is mostly compatible with `JSON.stringify` (TODO: replacer & spaces), but with the important exception that it "inlines" any `Promise`, `ReadableStream` and `AsyncIterable` it encounters. Again, an example:
+
+```js
+const stream = jsonStringifyStream({
+  type: Promise.resolve('foo'),
+  data: (async function* () {
+    yield { a: 1 } 
+    yield { b: 2 } 
+    yield { c: 3 } 
+    // Can have arbitrary pauses:
+    await timeout(100) 
+    // Can also have nested async values:
+    yield Promise.resolve({ zzz: 999 })
+  })(),
+})
+
+new Response(stream.pipeThrough(new TextEncoderStream()), {
+  headers: [['content-type', 'application/json']] 
+})
+```
+
+Inspecting this on the network would show the following (where every newline is a chunk):
+```json
+{
+"type":
+"foo"
+,
+"data":
+[
+{
+"a":
+1
+}
+,
+{
+"b":
+2
+}
+,
+{
+"c":
+3
+}
+,
+{
+"zzz":
+999
+}
+]
+}
+```
+
+## Limitations
+**JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Environments and the browser. Currently they are not "integrated", for example specifying a specific JSON Path does not limit the amount of parsing the parser does.
+
+
+## Appendix
+### To ReadableStream Function
+An example above uses a `toReadableStream` function, which can be implemented as follows:
+```ts
+function toReadableStream<T>(iter: Iterable<T>) {
+  const data = [...iter];
+  let v: T | undefined;
+  return new ReadableStream<T>({
+    pull(ctrl) { 
+      if (v = data.shift()) ctrl.enqueue(v); else ctrl.close();
+    },
+  });
+}
+```
+
+## Deno: Stream from Filesystem
+When reading JSON from a file system, nothing special is required: 
+
+```js
+new Response((await Deno.open('./nested.json')).readable, {
+  headers: [['content-type', 'application/json']] 
+})
+```
