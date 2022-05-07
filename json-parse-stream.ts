@@ -59,20 +59,6 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
   // FIXME: Just acquiring this property will lock the internal stream. Different from regular transform stream.
   get readable(): ReadableStream<T> {
     return this.#readable.pipeThrough(this.#filterStream(this.#jsonPath))
-    // NOTE: This would fix the above issue, but fails some internal assertions.
-    // let cache: ReadableStream<T> | undefined;
-    // const p = new Proxy(this.#internal, {
-    //   get: (target, p) => {
-    //     if (p === 'locked') return target.locked;
-    //     cache = cache ?? target.pipeThrough(this.#filterStream(this.#jsonPath))
-    //     return Reflect.get(cache, p);
-    //   },
-    //   has: (target, p) => {
-    //     cache = cache ?? target.pipeThrough(this.#filterStream(this.#jsonPath))
-    //     return Reflect.has(cache, p);
-    //   },
-    // })
-    // return p;
   }
 
   #a?: ReadableStream<T>;
