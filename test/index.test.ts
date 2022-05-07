@@ -16,6 +16,7 @@ import * as json from '../index.ts';
 
 test('transform streams', () => {
   assertExists(json.JSONParseStream)
+  assertExists(json.JSONParseWritable)
   assertExists(json.JSONStringifyStream)
 })
 
