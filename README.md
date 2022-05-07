@@ -100,7 +100,7 @@ It's important to add a `.*` at the end, but the `$` can be omitted.
 <!-- (The JSONPath argument can also be used to receive every parsed value as they arrive by using `$..*`) -->
 
 ## Retrieving multiple values and collections
-By providing a JSON Path to the constructor we can retrive the values of a single, nested array. 
+By providing a JSON Path to the constructor we can retrieve the values of a single, nested array. 
 However, in the example above we lose access to the `type` property. We would also have trouble with more than one array.
 For these scenarios `JSONParseStream` provides the `promise` and `iterable`/`stream` methods that return one or multiple values respectively. 
 It's best to explain by example. Assuming the data structure from above, we have:
@@ -111,7 +111,7 @@ const asyncData = {
   type: jsonStream.promise('$.type'),
   items: jsonStream.stream('$.items.*'),
 }
-await fetch('/nested.json').body
+fetch('/nested.json').body
   .pipeThrough(jsonStream)
   .pipeTo(new WritableStream({}))
 
@@ -123,9 +123,15 @@ await asyncData.items
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
 
-Note that this feature can be a bit tricky to use. Internally, `.stream` and `.iterable` are queued and filled up at the speed of `pipeTo`, which in this example is unconstrained. A future version of this library could remedy this.
+Note that there are many pitfalls with this feature. 
+Internally, `.stream` and `.iterable` tee the object stream and filter for the requested JSON paths. 
+This means memory usage can grow arbitrary large if the values aren't consumed in the same order as they arrive 
+(TODO: actually, the queue grows large the main .readable isn't consumed. Could fix with some trickery. Maybe last call to `stream` doesn't tee the value?)
 
-Note that `.promise` might resolve with `undefined` if the corresponding is not found in the stream.
+~~Note that `.promise` by itself does not pull values from the stream. If it isn't combined with `pipeTo` or similar, it will never resolve.~~
+~~If it is awaited before sufficient values have been pulled form the stream it will never resolve!~~
+
+Note that the promise might resolve with `undefined` if the corresponding JSON path is not found in the stream.
 
 ## Streaming Complex Data
 You might also be interested in how to stream complex data such as the one above from memory.
