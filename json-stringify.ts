@@ -24,6 +24,12 @@ const safeAdd = (seen: SeenWeakSet, value: any) => {
   seen.add(value)
 }
 
+const check = (v: any) => {
+  if (v === undefined) return false;
+  const type = typeof v;
+  return type !== 'function' && type !== 'symbol'
+}
+
 // TODO: Add replacer
 // TODO: add formatting/spaces
 /**
@@ -46,7 +52,7 @@ export async function* jsonStringifyGenerator(
   }
   else if (isPromiseLike(value)) {
     const v = await value
-    if (v !== undefined) {
+    if (check(v)) {
       safeAdd(seen, value)
       yield* jsonStringifyGenerator(v, seen)
       seen.delete(value)
@@ -54,7 +60,7 @@ export async function* jsonStringifyGenerator(
   }
   else if (isToJSON(value)) {
     const v = JSON.stringify(value);
-    if (v !== undefined) yield v
+    if (check(v)) yield v
   }
   else if (Array.isArray(value)) {
     yield '['
@@ -72,10 +78,10 @@ export async function* jsonStringifyGenerator(
     safeAdd(seen, value)
     let first = true;
     for (const [k, v] of Object.entries(value)) {
-      if (v !== undefined) {
+      if (check(v)) {
         const generator = jsonStringifyGenerator(v, seen)
         const peek = await generator.next()
-        if (peek.value !== undefined) {
+        if (check(peek.value)) {
           if (!first) yield ','; else first = false;
           yield `${JSON.stringify(k)}:`
           yield peek.value
@@ -87,7 +93,7 @@ export async function* jsonStringifyGenerator(
     yield '}'
   }
   else {
-    yield value === undefined ? 'null' : JSON.stringify(value)
+    yield check(value) ? JSON.stringify(value) : 'null'
   }
 }
 
