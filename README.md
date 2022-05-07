@@ -15,14 +15,14 @@ For this `JSONStringifyStream` and `JSONParseStream` are all that is required.
 They work practically the same as `TextEncoderStream` and `TextDecoderStream`:
 
 ```js
-const data = [
+const items = [
   { a: 1 }, 
   { b: 2}, 
   { c: 3 }, 
   'foo', 
   { a: { nested: { object: true }} }
 ];
-const stream = toReadableStream(data)
+const stream = toReadableStream(items)
   .pipeThrough(new JSONStringifyStream())
   .pipeThrough(new TextEncoderStream())
 
@@ -40,7 +40,7 @@ await stream
   .pipeThrough(new JSONParseStream())
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 
-assertEquals(data, collected)
+assertEquals(items, collected)
 ```
 
 Note that standard JSON is used as the transport format. Unlike ND-JSON, 
@@ -60,7 +60,7 @@ __JSON Stream__ also supports more complex use cases. Assume JSON of the followi
 // filename: "nested.json"
 {
   "type": "foo",
-  "data": [
+  "items": [
     { "a": 1 }, 
     { "b": 2 }, 
     { "c": 3 }, 
@@ -77,7 +77,7 @@ However, the constructor accepts a JSONPath-like string to locate the desired da
 ```js
 const collected = [];
 await fetch('/nested.json').body
-  .pipeThrough(new JSONParseStream('$.data.*')) // <-- new
+  .pipeThrough(new JSONParseStream('$.items.*')) // <-- new
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
 
@@ -101,14 +101,15 @@ It's important to add a `.*` at the end, but the `$` can be omitted.
 
 ## Retrieving multiple values and collections
 By providing a JSON Path to the constructor we can retrive the values of a single, nested array. 
-However, we lose access to the `type` value, and we would also have trouble with more than one array.
-For this these scenarios `JSONParseStream` provides the `promise` and `iterable`/`stream` methods that return one or multiple values respectively: It's best to explain by example. Assuming the data structure from above, we have:
+However, in the example above we lose access to the `type` property. We would also have trouble with more than one array.
+For these scenarios `JSONParseStream` provides the `promise` and `iterable`/`stream` methods that return one or multiple values respectively. 
+It's best to explain by example. Assuming the data structure from above, we have:
 
 ```js
 const jsonStream = new JSONParseStream();
 const asyncData = {
-  type: jsonStream.promise('$.type')
-  data: jsonStream.stream('$.data.*')
+  type: jsonStream.promise('$.type'),
+  items: jsonStream.stream('$.items.*'),
 }
 await fetch('/nested.json').body
   .pipeThrough(jsonStream)
@@ -118,7 +119,7 @@ console.log(await asyncData.type) // "foo"
 
 // We can collect the values as before:
 const collected = [];
-await asyncData.data
+await asyncData.items
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
 
@@ -135,7 +136,7 @@ For that case __JSON Stream__ provides the `jsonStringifyStream` method (TODO: b
 ```js
 const stream = jsonStringifyStream({
   type: Promise.resolve('foo'),
-  data: (async function* () {
+  items: (async function* () {
     yield { a: 1 } 
     yield { b: 2 } 
     yield { c: 3 } 
@@ -157,7 +158,7 @@ Inspecting this on the network would show the following (where every newline is 
 "type":
 "foo"
 ,
-"data":
+"items":
 [
 {
 "a":
@@ -191,11 +192,11 @@ Inspecting this on the network would show the following (where every newline is 
 An example above uses a `toReadableStream` function, which can be implemented as follows:
 ```ts
 function toReadableStream<T>(iter: Iterable<T>) {
-  const data = [...iter];
-  let v: T | undefined;
+  const xs = [...iter];
+  let x: T | undefined;
   return new ReadableStream<T>({
     pull(ctrl) { 
-      if (v = data.shift()) ctrl.enqueue(v); else ctrl.close();
+      if (x = xs.shift()) ctrl.enqueue(x); else ctrl.close();
     },
   });
 }
