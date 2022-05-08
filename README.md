@@ -101,18 +101,17 @@ It's important to add a `.*` at the end, but the `$` can be omitted.
 ## Retrieving multiple values and collections
 By providing a JSON Path to the constructor we can retrieve the values of a single, nested array. 
 However, in the example above we lose access to the `type` property. We would also have trouble with more than one array.
-For these scenarios `JSONParseStream` provides the `promise` and `iterable`/`stream` methods that return one or multiple values respectively. 
+For these scenarios theres the `JSONParseWritable` class that provides `promise` and `iterable`/`stream` methods to return one or multiple values respectively. 
 It's best to explain by example. Assuming the data structure from above, we have:
 
 ```js
-const jsonStream = new JSONParseStream();
+const jsonStream = new JSONParseWritable();
 const asyncData = {
   type: jsonStream.promise('$.type'),
   items: jsonStream.stream('$.items.*'),
 }
 (await fetch('/nested.json').body)
-  .pipeThrough(jsonStream) 
-  // no .pipeTo required
+  .pipeTo(jsonStream)  // <-- new
 
 assertEquals(await asyncData.type, 'foo')
 
