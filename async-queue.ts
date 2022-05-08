@@ -49,7 +49,7 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
       this.#error = err;
     }
 
-    this.return(); 
+    this.return();
   }
 
   #abortListener = () => {
@@ -59,17 +59,17 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
   push(el: T) {
     const promise = this.#unconsumedPromises.shift();
     if (promise) {
-      promise.resolve({ value: el as T, done: false }); // FIXME
+      promise.resolve({ value: el, done: false });
     } else {
-      this.#unconsumedValues.push(el as T); // FIXME
+      this.#unconsumedValues.push(el);
     }
   }
 
   // TODO: does it make sense/is it possible to add `shift` / `pop`??
 
-  /** Alias for `next` */
-  shift(): Promise<IteratorResult<T, void>> {
-    return this.next();
+  async shift(): Promise<T | undefined> {
+    const { done, value } = await this.next();
+    return done ? undefined : value;
   }
 
   next(): Promise<IteratorResult<T, void>> {
@@ -99,7 +99,7 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
       this.#unconsumedPromises.push({ resolve, reject });
     });
   }
-  
+
   return(): Promise<IteratorResult<T, void>> {
     if (this.#signal) {
       this.#signal.removeEventListener('abort', this.#abortListener);

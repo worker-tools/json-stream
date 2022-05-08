@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any no-empty
-import { asyncIterableToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
+import { asyncIterToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 
 type SeenWeakSet = WeakSet<any>;
 
@@ -7,10 +7,10 @@ type Primitive = undefined | boolean | number | string | bigint | symbol;
 
 export type ToJSON = { toJSON: (key?: any) => string }
 
-const _isIterable = <T>(x: unknown): x is Iterable<T> => 
+export const isIterable = <T>(x: unknown): x is Iterable<T> =>
   x != null && typeof x === 'object' && Symbol.iterator in x
 
-const isAsyncIterable = <T>(x: unknown): x is AsyncIterable<T> => 
+export const isAsyncIterable = <T>(x: unknown): x is AsyncIterable<T> =>
   x != null && typeof x === 'object' && Symbol.asyncIterator in x
 
 const isPromiseLike = <T>(x: unknown): x is PromiseLike<T> =>
@@ -103,7 +103,7 @@ export async function* jsonStringifyGenerator(
 export function jsonStringifyStream(
   value: null | Primitive | ToJSON | any[] | Record<string, any> | PromiseLike<any> | AsyncIterable<any> | ReadableStream,
 ): ReadableStream<string> {
-  return asyncIterableToStream(jsonStringifyGenerator(value))
+  return asyncIterToStream(jsonStringifyGenerator(value))
 }
 
 export class JSONStringifyReadable extends ReadableStream<string> {
@@ -118,7 +118,7 @@ export class JSONStringifyReadable extends ReadableStream<string> {
         if (!done) controller.enqueue(value); else controller.close();
       },
       async cancel(reason) {
-        try { await iterator.throw?.(reason) } catch {  }
+        try { await iterator.throw?.(reason) } catch { }
       },
     })
   }
