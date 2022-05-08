@@ -65,8 +65,6 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
     }
   }
 
-  // TODO: does it make sense/is it possible to add `shift` / `pop`??
-
   async shift(): Promise<T | undefined> {
     const { done, value } = await this.next();
     return done ? undefined : value;
@@ -98,6 +96,10 @@ export class AsyncQueue<T = any> implements AsyncIterableIterator<T> {
     return new Promise((resolve, reject) => {
       this.#unconsumedPromises.push({ resolve, reject });
     });
+  }
+
+  get length() {
+    return this.#unconsumedValues.length - this.#unconsumedPromises.length
   }
 
   return(): Promise<IteratorResult<T, void>> {
