@@ -1,4 +1,4 @@
-// deno-lint-ignore-file no-explicit-any
+// deno-lint-ignore-file no-explicit-any no-empty
 import { asyncIterableToStream } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 
 type SeenWeakSet = WeakSet<any>;
@@ -104,4 +104,22 @@ export function jsonStringifyStream(
   value: null | Primitive | ToJSON | any[] | Record<string, any> | PromiseLike<any> | AsyncIterable<any> | ReadableStream,
 ): ReadableStream<string> {
   return asyncIterableToStream(jsonStringifyGenerator(value))
+}
+
+export class JSONStringifyReadable extends ReadableStream<string> {
+  constructor(value: any) {
+    let iterator: AsyncIterator<string>;
+    super({
+      start() {
+        iterator = jsonStringifyGenerator(value)[Symbol.asyncIterator]()
+      },
+      async pull(controller) {
+        const { value, done } = await iterator.next();
+        if (!done) controller.enqueue(value); else controller.close();
+      },
+      async cancel(reason) {
+        try { await iterator.throw?.(reason) } catch {  }
+      },
+    })
+  }
 }
