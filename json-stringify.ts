@@ -32,6 +32,7 @@ const check = (v: any) => {
 
 // TODO: Add replacer
 // TODO: add formatting/spaces
+// TODO: concurrent rendering
 /**
  * @deprecated Change name to something more descriptive!? 
  */
@@ -114,6 +115,7 @@ export class JSONStringifyReadable extends ReadableStream<string> {
         iterator = jsonStringifyGenerator(value)[Symbol.asyncIterator]()
       },
       async pull(controller) {
+        // console.log('stringify', controller.desiredSize)
         const { value, done } = await iterator.next();
         if (!done) controller.enqueue(value); else controller.close();
       },

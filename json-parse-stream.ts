@@ -1,10 +1,11 @@
 // deno-lint-ignore-file no-explicit-any no-cond-assign ban-unused-ignore no-unused-vars
-import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
+import { asyncIterToStream, streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
+// import { AsyncQueue } from '../async-queue/index.ts';
 import { JSONParser } from './json-parser.js';
 import { normalize, match } from './json-path.ts'
 
-async function* _identity<T>(iter: Iterable<T> | AsyncIterable<T>) {
+async function* identity<T>(iter: Iterable<T> | AsyncIterable<T>) {
   for await (const x of iter) yield x;
 }
 
@@ -30,12 +31,11 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
           if (match(expr, path)) {
             controller.enqueue(value as any);
           } else if (expr.startsWith(path)) {
-            // Closing the stream early when the selected path can no longer yield values.
             controller.terminate()
           }
         };
       },
-      transform: (chunk) => {
+      transform: (chunk, controller) => {
         parser.write(chunk);
       },
     });
@@ -45,11 +45,13 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
   get path() { return this.#jsonPath }
 }
 
-const extract = <K, V>(m: Map<K, V>, k: K) => { const v = m.get(k); m.delete(k); return v; }
+const remove = <K, V>(m: Map<K, V>, k: K) => { const v = m.get(k); m.delete(k); return v; }
 
 /** @deprecated Rename!!! */
 export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array, [string, T]> {
-  #promises = new Map<string, ResolvablePromise<any>>();
+  #queues = new Map<string, ReadableStreamDefaultController<any>>();
+  #lazies = new Map<string, ResolvablePromise<any>>();
+  #reader: ReadableStreamDefaultReader<[string, T]>
 
   constructor() {
     let parser: JSONParser;
@@ -59,51 +61,31 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
         parser.onValue = (value: T) => {
           const path = mkPath(parser)
 
-          controller.enqueue([path, value]);
-
-          for (const expr of this.#promises.keys()) {
+          for (const expr of this.#queues.keys()) {
             if (match(expr, path)) {
-              extract(this.#promises, expr)!.resolve(value)
-            } else if (expr.startsWith(path)) {
-              extract(this.#promises, expr)!.resolve(undefined)
+              this.#queues.get(expr)!.enqueue(value)
+            } // no else if => can both be true
+            if (expr.startsWith(path)) {
+              remove(this.#queues, expr)!.close()
             }
           }
+          for (const expr of this.#lazies.keys()) {
+            if (match(expr, path)) {
+              remove(this.#lazies, expr)!.resolve(value)
+            } else if (expr.startsWith(path)) {
+              remove(this.#lazies, expr)!.resolve(undefined)
+            }
+          }
+
+          controller.enqueue([path, value]);
         };
       },
       transform(buffer) {
-        console.log('starting to pull')
-        // console.log('write', buffer)
+        // console.log('transform', buffer, controller.desiredSize)
         parser.write(buffer)
       },
-      flush() {
-        // TODO: close all open promises?
-      },
     });
-  }
-
-  #filterStream(expr: string) {
-    return new TransformStream({
-      transform: ([path, value], controller) => {
-        if (match(expr, path)) {
-          controller.enqueue(value as any);
-        } else if (expr.startsWith(path)) {
-          controller.terminate()
-          // this.#streams.delete(expr) // no longer need to track the stream
-        }
-      }
-    })
-  }
-
-  #a?: ReadableStream<[string, T]>
-  get #readable(): ReadableStream<[string, T]> {
-    return this.#a ?? this.readable;
-  }
-
-  #clone(last?: boolean) {
-    if (last) return this.#readable;
-    const [a, b] = this.#readable.tee()
-    this.#a = a;
-    return b;
+    this.#reader = this.readable.getReader();
   }
 
   /**
@@ -111,16 +93,11 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
    * 
    * __Starts to pull values form the underlying sink immediately!__
    * If the value is located after a large array in the JSON, the entire array will be parsed and kept in a queue!
-   * Use `lazy` instead if pulling form the stream elsewhere.
+   * Consider using `lazy` instead if pulling form a stream elsewhere.
    */
-  async eager<T = any>(jsonPath: string): Promise<T | undefined> {
-    console.log('eager', jsonPath, this.writable.locked)
-    const expr = normalize(jsonPath)
-    const stream = this.#clone().pipeThrough(this.#filterStream(expr))
-    // this.#streams.set(expr, stream)
-    const { done, value } = await stream.getReader().read();
-    // console.log('eager', value)
-    return done ? undefined : value;
+  async eager<U = any>(jsonPath: string): Promise<U | undefined> {
+    const x = await this.stream(jsonPath).getReader().read();
+    return x.done ? undefined : x.value;
   }
 
   /**
@@ -128,28 +105,42 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
    * 
    * __Does not pull from the underlying sink on its own!__
    * If there isn't another consumer pulling past the point where the value if found, it will never resolve! 
-   * Use with care!
+   * Consider using `eager` instead when running into deadlocks.
    */
-  lazy<T = any>(jsonPath: string): Promise<T | undefined> & { pull: () => Promise<T | undefined> } {
-    console.log('lazy', jsonPath, this.writable.locked)
-    const p = new ResolvablePromise<T | undefined>();
-    this.#promises.set(normalize(jsonPath), p)
+  lazy<U = any>(jsonPath: string): Promise<U | undefined> & { pull: () => Promise<U | undefined> } {
+    const p = new ResolvablePromise<U | undefined>();
+    this.#lazies.set(normalize(jsonPath), p)
     return Object.assign(p, { pull: () => this.eager(jsonPath) })
   }
 
-  promise<T = any>(jsonPath: string): Promise<T | undefined> & { pull: () => Promise<T | undefined> } {
-    return this.lazy(jsonPath);
+  /** @deprecated Use lazy/eager instead to meet your use case */
+  promise<T = any>(jsonPath: string): Promise<T | undefined> {
+    return this.eager(jsonPath);
   }
 
-  stream<T = any>(jsonPath: string): ReadableStream<T> {
-    console.log('stream', jsonPath, this.writable.locked)
-    const expr = normalize(jsonPath)
-    const stream = this.#clone().pipeThrough(this.#filterStream(expr))
-    // this.#streams.set(expr, stream)
-    return stream;
+  stream<U = any>(jsonPath: string): ReadableStream<U> {
+    const path = normalize(jsonPath);
+    return new ReadableStream({
+      start: (queue) => {
+        this.#queues.set(path, queue)
+      },
+      pull: async (queue) => {
+        // console.log('pull', jsonPath, queue.desiredSize)
+        while (true) {
+          const { done, value } = await this.#reader.read();
+          // FIXME: avoid duplicate match
+          if (done || match(value[0], path)) break;
+        }
+        // console.log('pull result', jsonPath, queue.desiredSize)
+      },
+      cancel: (err) => {
+        // If one of the child streams errors, error the whole pipeline. // TODO: or should it?
+        this.#reader.cancel(err)
+      },
+    }, { highWaterMark: 0 }) // does not pull on its own
   }
 
-  iterable<T = any>(jsonPath: string): AsyncIterableIterator<T> {
+  iterable<U = any>(jsonPath: string): AsyncIterableIterator<U> {
     return streamToAsyncIter(this.stream(jsonPath))
   }
 }

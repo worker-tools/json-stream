@@ -74,14 +74,3 @@ test('undefined toJSON result', async () => {
   const a = { toJSON() { return undefined } }
   assertEquals(await aJoin(jsonStringifyGenerator({ a, b: 4 })), JSON.stringify({ a, b: 4 }))
 })
-
-// test('with type', async () => {
-//   const json1 = { type: 'foo', items: asyncGen([{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }]) }
-//   assertEquals(await aJoin(jsonStringifyGenerator(json1)), JSON.stringify(json1))
-// })
-
-// test('two generators', async () => {
-//   const json1 = { filler: asyncGen(['__', '__', '__']), type: 'foo', items: asyncGen([{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }]) }
-//   assertEquals(await aJoin(jsonStringifyGenerator(json1)), JSON.stringify(json1))
-// })
-  

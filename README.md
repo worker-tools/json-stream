@@ -80,9 +80,10 @@ await (await fetch('/nested.json')).body
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
 
-It's important to add a `.*` at the end, but the `$` can be omitted. 
+It's important to add the `.*` at the end, otherwise the entire items array will arrive in a singe call once it is fully parsed.
 
-`JSONParseStream` only supports a subset of JSONPath, specifically eval (`@`) expressions and negative slices are not supported.
+`JSONParseStream` only supports a subset of JSONPath, specifically eval (`@`) expressions and negative slices are omitted.
+Below is a table showing some examples:
 
 | JSONPath                  | Description                                                 |
 |:--------------------------|:------------------------------------------------------------|
@@ -95,41 +96,6 @@ It's important to add a `.*` at the end, but the `$` can be omitted.
 | `$..book[0,1]`            | The first two books via subscript union                     |
 | `$..book[:2]`             | The first two books via subscript array slice               |
 | `$..*`                    | All members of JSON structure                               |
-
-<!-- (The JSONPath argument can also be used to receive every parsed value as they arrive by using `$..*`) -->
-
-## Retrieving multiple values and collections
-By providing a JSON Path to the constructor we can retrieve the values of a single, nested array. 
-However, in the example above we lose access to the `type` property. We would also have trouble with more than one array.
-For these scenarios theres the `JSONParseWritable` class that provides `promise` and `iterable`/`stream` methods to return one or multiple values respectively. 
-It's best to explain by example. Assuming the data structure from above, we have:
-
-```js
-const jsonStream = new JSONParseWritable();
-const asyncData = {
-  type: jsonStream.promise('$.type'),
-  items: jsonStream.stream('$.items.*'),
-}
-(await fetch('/nested.json').body)
-  .pipeTo(jsonStream)  // <-- new
-
-assertEquals(await asyncData.type, 'foo')
-
-// We can collect the values as before:
-const collected = [];
-await asyncData.items
-  .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
-```
-
-Note that there are many pitfalls with this feature. 
-Internally, `.stream` and `.iterable` tee the object stream and filter for the requested JSON paths. 
-This means memory usage can grow arbitrary large if the values aren't consumed in the same order as they arrive 
-(TODO: actually, the queue grows large the main .readable isn't consumed. Could fix with some trickery. Maybe last call to `stream` doesn't tee the value?)
-
-~~Note that `.promise` by itself does not pull values from the stream. If it isn't combined with `pipeTo` or similar, it will never resolve.~~
-~~If it is awaited before sufficient values have been pulled form the stream it will never resolve!~~
-
-Note that the promise might resolve with `undefined` if the corresponding JSON path is not found in the stream.
 
 ## Streaming Complex Data
 You might also be interested in how to stream complex data such as the one above from memory.
@@ -144,8 +110,6 @@ const stream = jsonStringifyStream({
     yield { a: 1 } 
     yield { b: 2 } 
     yield { c: 3 } 
-    // Can have arbitrary pauses:
-    await timeout(100) 
     // Can also have nested async values:
     yield Promise.resolve({ zzz: 999 })
   })(),
@@ -187,8 +151,122 @@ Inspecting this on the network would show the following (where every newline is 
 }
 ```
 
+## Retrieving Complex Structures
+By providing a JSON Path to `JSONParseStream` we can stream the values of a single, nested array. 
+For scenarios where the JSON structure is more complex, there is the `JSONParseNexus` (TODO: better name) class. 
+It provides promise and and stream-based methods that accept JSON paths to retrieve one or multiple values respectively. 
+While it is much more powerful and can restore arbitrary complex structures, it is also more difficult to use.
+
+It's best to explain by example. Assuming the data structure from above, we have:
+
+```js
+const ctrl = new JSONParseNexus();
+const asyncData = {
+  type: ctrl.eager('$.type'),
+  items: ctrl.stream('$.items.*'),
+}
+(await fetch('/nested.json').body)
+  .pipeThrough(ctrl)  // <-- new
+
+assertEquals(await asyncData.type, 'foo')
+
+// We can collect the values as before:
+const collected = [];
+await asyncData.items
+  .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
+```
+
+While this works just fine, it becomes more complicated when there are multiple streams and values involved.
+
+### Managing Internal Queues
+It's important to understand that `JSONParseNexus` provides mostly pull-based APIs.
+In the cause of `.stream()` and `.iterable()` no work is being done until a consumer requests a value by calling `.read()` or `.next()` respectively.
+However, once a value is requested, `JSONParseNexus` will parse values until the requested JSON path is found. 
+Along the way it will fill up queues for any other requested JSON paths it encounters.
+This means that memory usage can grow arbitrarily large unless the data is processed in the order it was stringified:
+Take for example the following structure:
+
+```js
+const ctrl = new JSONParseNexus();
+
+jsonStringifyStream({
+  xs: new Array(10_000).fill({ x: 'x' }),
+  ys: new Array(10_000).fill({ y: 'y' }),
+}).pipeThrough(ctrl)
+
+for await (const y of ctrl.iterable('$.ys.*')) console.log(y)
+for await (const x of ctrl.iterable('$.xs.*')) console.log(x)
+```
+
+In this examples Ys are being processed before Xs, but were stringified in the opposite order. 
+This means the internal queue of Xs grows to 10.000 before it is being processed by the second loop. 
+This can be avoided by changing the order to match the stringification order.
+
+### Eager and Lazy Promises
+Special attention has to be given single values, as Promises in JS have no concept of "pulling" data. 
+`JSONParseNexus` provides two separate methods to request a single value: `.eager` and `.lazy`. 
+Both return promises that resolve with the requested value, but they differ in their effect on the internal stream: 
+The former starts pulling values from the stream immediately until the requested value is found, 
+while the later will only resolve if another consumer advances the parser's cursor beyond the point where the requested value is located. Both have pitfalls. Requesting a value eager might parse an arbitrary amount of JSON, fill up queues and remove other's consumers ability to control the pace of data. Requesting values lazily on the other hand might block th
+
+```js
+const ctrl = new JSONParseNexus();
+
+jsonStringifyStream({
+  type: 'items',
+  items: new Array(10_000).fill({ x: 'x' }),
+  trailer: 'trail',
+}).pipeThrough(ctrl)
+
+const data = {
+  type: ctrl.eager('$.type') // Fine
+  items: ctrl.iterable('$.items.*') // Fine
+  trailer: ctrl.lazy('$.trailer')
+}
+
+const type = await data.type
+for await (const x of data.items) console.log(x)
+const trailer = await data.trailer.pull()
+```
+
+In this example the use of `.eager` has unintended consequences: It causes the entire 
+
+<!-- ```js
+const ctrl = new JSONParseNexus();
+
+const data = {
+  type: ctrl.lazy('$.type') // Fine
+  items: ctrl.iterable('$.items.*') // Fine
+  trailer: ctrl.lazy('$.trailer') // Oh-Oh
+}
+
+jsonStringifyStream({
+  type: 'items',
+  items: new Array(10_000).fill({ x: 'x' }),
+  trailer: 'trail',
+}).pipeThrough(ctrl)
+
+const type = await data.type.pull()
+for await (const x of data.items) console.log(x)
+const trailer = await data.trailer.pull()
+``` -->
+
+
+<!-- Note that there are many pitfalls with this feature. 
+~~Internally, `.stream` and `.iterable` tee the object stream and filter for the requested JSON paths.~~
+Internally `JSONParseNexus` manages multiple queues that it fills i
+This means memory usage can grow arbitrary large if the values aren't consumed in the same order as they arrive 
+(TODO: actually, the queue grows large the main .readable isn't consumed. Could fix with some trickery. Maybe last call to `stream` doesn't tee the value?) -->
+
+<!-- ~~Note that `.promise` by itself does not pull values from the stream. If it isn't combined with `pipeTo` or similar, it will never resolve.~~
+~~If it is awaited before sufficient values have been pulled form the stream it will never resolve!~~ -->
+
+<!-- Note that the promise might resolve with `undefined` if the corresponding JSON path is not found in the stream. -->
+
+
 ## Limitations
-**JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Environments and the browser. Currently they are not "integrated", for example specifying a specific JSON Path does not limit the amount of parsing the parser does.
+**JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Environments and the browser. 
+Currently they are not "integrated", for example specifying a specific JSON Path does not limit the amount of parsing the parser does.
 
 
 ## Appendix

@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write=./,/Users/qwtel/Library/Caches/deno --allow-net --allow-env=HOME,DENO_AUTH_TOKENS,DENO_DIR --allow-run=git,pnpm
+// deno-lint-ignore-file no-unused-vars
 
 // ex. scripts/build_npm.ts
 import { basename, extname } from "https://deno.land/std@0.133.0/path/mod.ts";

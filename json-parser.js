@@ -1,4 +1,4 @@
-// deno-lint-ignore-file adjacent-overload-signatures no-dupe-class-members no-unused-vars no-case-declarations
+// deno-lint-ignore-file no-unused-vars no-case-declarations
 
 // Modernized/de-nodified version of creationix/jsonparse
 // Copyright (c) 2012 Tim Caswell
@@ -341,9 +341,6 @@ class Parser {
         else { return this.charError(buffer, i); }
       }
     }
-  }
-  onToken(token, value) {
-    // Override this to get events
   }
 
   parseError(token, value) {

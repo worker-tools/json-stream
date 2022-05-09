@@ -13,8 +13,7 @@ import {
 const { test } = Deno;
 
 import { JSONStringifyStream } from '../json-stringify-stream.ts'
-import { JSONParseStream, JSONParseWritable } from '../json-parse-stream.ts'
-import { jsonStringifyStream } from '../json-stringify.ts'
+import { JSONParseStream, JSONParseNexus } from '../json-parse-stream.ts'
 
 const collect = async <T>(stream: ReadableStream<T>) => {
   const collected: T[] = [];
@@ -66,7 +65,7 @@ test('roundtrip', async () => {
 })
 
 test('Retrieving multiple values and collections', async () => {
-  const jsonStream = new JSONParseWritable();
+  const jsonStream = new JSONParseNexus();
   const asyncData = {
     type: jsonStream.promise('$.type'),
     items: jsonStream.stream('$.items.*'),
@@ -82,7 +81,7 @@ test('Retrieving multiple values and collections', async () => {
     ]
   };
 
-  new Response(JSON.stringify(nested)).body!.pipeTo(jsonStream) 
+  new Response(JSON.stringify(nested)).body!.pipeThrough(jsonStream) 
 
   assertEquals(await asyncData.type, 'foo')
 
