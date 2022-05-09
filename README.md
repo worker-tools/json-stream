@@ -4,7 +4,7 @@ Utilities for working with streaming JSON in Worker Environments such as Cloudfl
 
 ***
 
-__Work in Progress__: Anything might change
+__Work in Progress__: See TODOs & Deprecations
 
 ***
 
@@ -207,7 +207,13 @@ Special attention has to be given single values, as Promises in JS have no conce
 `JSONParseNexus` provides two separate methods to request a single value: `.eager` and `.lazy`. 
 Both return promises that resolve with the requested value, but they differ in their effect on the internal stream: 
 The former starts pulling values from the stream immediately until the requested value is found, 
-while the later will only resolve if another consumer advances the parser's cursor beyond the point where the requested value is located. Both have pitfalls. Requesting a value eager might parse an arbitrary amount of JSON, fill up queues and remove other's consumers ability to control the pace of data. Requesting values lazily on the other hand might block th
+while the later will only resolve if another consumer advances the parser's cursor beyond the point where the requested value is located. 
+
+Both approaches have their pitfalls.
+Requesting a value eager might parse an arbitrary amount of JSON, fill up queues and remove other's consumers ability to control the pace of data. 
+Requesting values lazily on the other hand might block execution entirely.
+
+TODO: Find a better solution. Perhaps pull as part of `.then` call??
 
 ```js
 const ctrl = new JSONParseNexus();
@@ -229,7 +235,7 @@ for await (const x of data.items) console.log(x)
 const trailer = await data.trailer.pull()
 ```
 
-In this example the use of `.eager` has unintended consequences: It causes the entire 
+In this example the use of `.eager` has unintended consequences. TBC
 
 <!-- ```js
 const ctrl = new JSONParseNexus();
