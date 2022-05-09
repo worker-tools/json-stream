@@ -42,10 +42,10 @@ await build({
       name: '@worker-tools/resolvable-promise',
       version: 'latest',
     },
-    'https://ghuc.cc/worker-tools/extendable-promise/index.ts': {
-      name: '@worker-tools/extendable-promise',
-      version: 'latest',
-    },
+    // 'https://ghuc.cc/worker-tools/extendable-promise/index.ts': {
+    //   name: '@worker-tools/extendable-promise',
+    //   version: 'latest',
+    // },
     'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts': {
       name: 'whatwg-stream-to-async-iter',
       version: 'latest',

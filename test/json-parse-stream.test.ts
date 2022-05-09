@@ -12,8 +12,8 @@ import {
 } from 'https://deno.land/std@0.133.0/testing/asserts.ts'
 const { test } = Deno;
 
-import { jsonStringifyGenerator } from '../json-stringify.ts'
-import { JSONParseStream, JSONParseWritable } from '../json-parse-stream.ts'
+import { jsonStringifyGenerator, jsonStringifyStream } from '../json-stringify.ts'
+import { JSONParseStream, JSONParseNexus } from '../json-parse-stream.ts'
 
 async function consume(stream: ReadableStream) {
   const reader = stream.getReader();
@@ -75,65 +75,102 @@ const aJoin = async (iter: AsyncIterable<string>, separator = '') => {
 }
 
 test('promise value', async () => {
-  const parseStream = new JSONParseWritable()
+  const parseStream = new JSONParseNexus()
   const actual = {
-    type: parseStream.promise('$.type'),
-    data: parseStream.iterable('$.data.*')
+    type: parseStream.lazy('$.type'),
+    items: parseStream.iterable('$.items.*')
   }
-  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
-  const done = new Response(expected).body!
-    .pipeTo(parseStream)
+  const expected = JSON.stringify({ type: 'foo', items: [{ a: 1 }, { a: 2 }, { a: 3 }] })
+  new Response(expected).body!
+    .pipeThrough(parseStream)
 
   const actualString = await aJoin(jsonStringifyGenerator(actual))
   assertEquals(actualString, expected)
-  await done;
 })
 
 test('promise value II', async () => {
-  const parseStream = new JSONParseWritable()
+  const parseStream = new JSONParseNexus()
   const actual = {
-    type: parseStream.promise('$.type'),
-    data: parseStream.stream('$.data.*')
+    type: parseStream.lazy('$.type'),
+    items: parseStream.stream('$.items.*')
   }
-  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
-  const done = new Response(expected).body!
-    .pipeTo(parseStream)
+  const expected = JSON.stringify({ type: 'foo', items: [{ a: 1 }, { a: 2 }, { a: 3 }] })
+  new Response(expected).body!
+    .pipeThrough(parseStream)
 
   const actualString = await aJoin(jsonStringifyGenerator(actual))
   assertEquals(actualString, expected)
-  await done;
 })
 
 test('promise value III', async () => {
-  const parseStream = new JSONParseWritable()
+  const parseStream = new JSONParseNexus()
   const actual = {
-    type: parseStream.promise('$.type'),
-    data: parseStream.iterable('$.data.*')
+    type: parseStream.lazy('$.type'),
+    items: parseStream.iterable('$.items.*')
   }
-  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
-  new Response(expected).body!.pipeTo(parseStream)
+  const expected = JSON.stringify({ type: 'foo', items: [{ a: 1 }, { a: 2 }, { a: 3 }] })
+  new Response(expected).body!.pipeThrough(parseStream)
 
   const actualString = await aJoin(jsonStringifyGenerator(actual))
   assertEquals(actualString, expected)
 })
 
 test('promise value IV', async () => {
-  const parseStream = new JSONParseWritable()
+  const parseStream = new JSONParseNexus()
   const actual = {
-    type: parseStream.promise('$.type'),
-    data: parseStream.stream('$.data.*')
+    type: parseStream.lazy('$.type'),
+    items: parseStream.stream('$.items.*')
   }
-  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
-  new Response(expected).body!.pipeTo(parseStream)
+  const expected = JSON.stringify({ type: 'foo', items: [{ a: 1 }, { a: 2 }, { a: 3 }] })
+  new Response(expected).body!.pipeThrough(parseStream)
 
   const actualString = await aJoin(jsonStringifyGenerator(actual))
   assertEquals(actualString, expected)
 })
 
-test('read only until first value', async () => {
-  const parseStream = new JSONParseWritable()
-  const type = parseStream.promise('$.type');
-  const expected = JSON.stringify({ type: 'foo', data: [{ a: 1 }, { b: 2 }, { c: 3 }] })
-  new Response(expected).body!.pipeTo(parseStream)
+async function* asyncGen<T>(xs: T[]) {
+  for (const x of xs) yield x
+}
+
+const json1 = { filler: asyncGen(['__', '__', '__']), type: 'foo', items: asyncGen([{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }]) }
+test('read only until first value eager', async () => {
+  const parseStream = new JSONParseNexus()
+  const type = parseStream.eager<string>('$.type');
+  jsonStringifyStream(json1).pipeThrough(parseStream)
+
   assertEquals(await type, 'foo')
+})
+const timeout = (n?: number) => new Promise(r => setTimeout(r, n))
+
+test('read only until first value lazy', async () => {
+  const parseStream = new JSONParseNexus()
+  const type = parseStream.promise<string>('$.type');
+  jsonStringifyStream(json1).pipeThrough(parseStream)
+
+  assertEquals(await Promise.race([type, timeout(10).then(() => 'x')]), 'x')
+})
+
+test('read only until first value lazy II', async () => {
+  const parseStream = new JSONParseNexus()
+  const type = parseStream.promise<string>('$.type');
+  const _items = parseStream.stream('$.items.*') 
+  jsonStringifyStream(json1).pipeThrough(parseStream)
+
+  assertEquals(await Promise.race([type, timeout(10).then(() => 'x')]), 'x')
+})
+
+test('read only until first value lazy+pull', async () => {
+  const parseStream = new JSONParseNexus()
+  const type = parseStream.promise<string>('$.type');
+  jsonStringifyStream(json1).pipeThrough(parseStream)
+
+  assertEquals(await type.pull(), 'foo')
+})
+
+test('writable locked?', async () => {
+  const parseStream = new JSONParseNexus()
+  const filler = parseStream.stream<string>('$.filler.*');
+  const items = parseStream.stream<string>('$.items.*');
+  // jsonStringifyStream(json1).pipeThrough(parseStream)
+  // assertEquals(await type.pull(), 'foo')
 })

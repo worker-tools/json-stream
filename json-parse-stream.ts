@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any no-cond-assign ban-unused-ignore no-unused-vars
 import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
+import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
 import { JSONParser } from './json-parser.js';
 import { normalize, match } from './json-path.ts'
 
@@ -44,30 +45,40 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
   get path() { return this.#jsonPath }
 }
 
-export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Array> {
-  #readable: ReadableStream<[string, T]>;
-  // #streams = new Map<string, ReadableStream<unknown>>();
+const extract = <K, V>(m: Map<K, V>, k: K) => { const v = m.get(k); m.delete(k); return v; }
+
+/** @deprecated Rename!!! */
+export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array, [string, T]> {
+  #promises = new Map<string, ResolvablePromise<any>>();
 
   constructor() {
     let parser: JSONParser;
-    let readable: ReadableStream<[string, T]>
     super({
-      start: (writeCtrl) => {
+      start: (controller) => {
         parser = new JSONParser();
-        readable = new ReadableStream({
-          start: (readCtrl) => {
-            parser.onValue = (value: T) => {
-              const path = mkPath(parser)
-              readCtrl.enqueue([path, value]);
-            };
-          },
-        })
+        parser.onValue = (value: T) => {
+          const path = mkPath(parser)
+
+          controller.enqueue([path, value]);
+
+          for (const expr of this.#promises.keys()) {
+            if (match(expr, path)) {
+              extract(this.#promises, expr)!.resolve(value)
+            } else if (expr.startsWith(path)) {
+              extract(this.#promises, expr)!.resolve(undefined)
+            }
+          }
+        };
       },
-      write: (chunk) => {
-        parser.write(chunk);
+      transform(buffer) {
+        console.log('starting to pull')
+        // console.log('write', buffer)
+        parser.write(buffer)
+      },
+      flush() {
+        // TODO: close all open promises?
       },
     });
-    this.#readable = readable!; // sus
   }
 
   #filterStream(expr: string) {
@@ -75,9 +86,7 @@ export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Arr
       transform: ([path, value], controller) => {
         if (match(expr, path)) {
           controller.enqueue(value as any);
-        } 
-        else if (expr.startsWith(path)) {
-          // Closing the stream early when the selected path can no longer yield values.
+        } else if (expr.startsWith(path)) {
           controller.terminate()
           // this.#streams.delete(expr) // no longer need to track the stream
         }
@@ -85,26 +94,55 @@ export class JSONParseWritable<T = any> extends WritableStream<string | Uint8Arr
     })
   }
 
-  /** @deprecated should this be exposed? */
-  get readable(): ReadableStream<[string, T]> {
-    return this.#readable
+  #a?: ReadableStream<[string, T]>
+  get #readable(): ReadableStream<[string, T]> {
+    return this.#a ?? this.readable;
   }
 
-  #clone() {
+  #clone(last?: boolean) {
+    if (last) return this.#readable;
     const [a, b] = this.#readable.tee()
-    this.#readable = a;
+    this.#a = a;
     return b;
   }
 
-  async promise<T = any>(jsonPath: string): Promise<T | undefined> {
+  /**
+   * Returns a promise that resolves with the value found at the provided `jsonPath` or `undefined` otherwise.
+   * 
+   * __Starts to pull values form the underlying sink immediately!__
+   * If the value is located after a large array in the JSON, the entire array will be parsed and kept in a queue!
+   * Use `lazy` instead if pulling form the stream elsewhere.
+   */
+  async eager<T = any>(jsonPath: string): Promise<T | undefined> {
+    console.log('eager', jsonPath, this.writable.locked)
     const expr = normalize(jsonPath)
     const stream = this.#clone().pipeThrough(this.#filterStream(expr))
     // this.#streams.set(expr, stream)
     const { done, value } = await stream.getReader().read();
+    // console.log('eager', value)
     return done ? undefined : value;
   }
 
+  /**
+   * Returns a promise that resolves with the value found at the provided `jsonPath` or `undefined` otherwise.
+   * 
+   * __Does not pull from the underlying sink on its own!__
+   * If there isn't another consumer pulling past the point where the value if found, it will never resolve! 
+   * Use with care!
+   */
+  lazy<T = any>(jsonPath: string): Promise<T | undefined> & { pull: () => Promise<T | undefined> } {
+    console.log('lazy', jsonPath, this.writable.locked)
+    const p = new ResolvablePromise<T | undefined>();
+    this.#promises.set(normalize(jsonPath), p)
+    return Object.assign(p, { pull: () => this.eager(jsonPath) })
+  }
+
+  promise<T = any>(jsonPath: string): Promise<T | undefined> & { pull: () => Promise<T | undefined> } {
+    return this.lazy(jsonPath);
+  }
+
   stream<T = any>(jsonPath: string): ReadableStream<T> {
+    console.log('stream', jsonPath, this.writable.locked)
     const expr = normalize(jsonPath)
     const stream = this.#clone().pipeThrough(this.#filterStream(expr))
     // this.#streams.set(expr, stream)
