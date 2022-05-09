@@ -1,7 +1,6 @@
 // deno-lint-ignore-file no-explicit-any no-cond-assign ban-unused-ignore no-unused-vars
-import { asyncIterToStream, streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
+import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
-// import { AsyncQueue } from '../async-queue/index.ts';
 import { JSONParser } from './json-parser.js';
 import { normalize, match } from './json-path.ts'
 

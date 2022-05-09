@@ -43,6 +43,10 @@ await build({
       name: '@worker-tools/resolvable-promise',
       version: 'latest',
     },
+    'https://ghuc.cc/worker-tools/stream-response/index.ts': {
+      name: '@worker-tools/stream-response',
+      version: 'latest',
+    },
     // 'https://ghuc.cc/worker-tools/extendable-promise/index.ts': {
     //   name: '@worker-tools/extendable-promise',
     //   version: 'latest',

@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { StreamResponse, StreamRequest } from "../stream-response/index.ts";
+import { StreamResponse, StreamRequest } from "https://ghuc.cc/worker-tools/stream-response/index.ts";
 import { JSONStringifyReadable } from './json-stringify.ts';
 
 export type JSONStreamBodyInit = any 
