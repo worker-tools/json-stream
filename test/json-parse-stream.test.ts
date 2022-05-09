@@ -84,7 +84,7 @@ test('promise value', async () => {
   new Response(expected).body!.pipeThrough(nexus)
 
   const actualString = await aJoin(jsonStringifyGenerator(actual))
-  console.log('actualString', actualString)
+  // console.log('actualString', actualString)
   assertEquals(actualString, expected)
 })
 

@@ -90,17 +90,3 @@ test('Retrieving multiple values and collections', async () => {
 
   assertEquals(collected, nested.items)
 })
-
-// test('foo', async () => {
-//   const stream = jsonStringifyStream({
-//     type: Promise.resolve('foo'),
-//     data: (async function* () {
-//       yield { a: 1 } 
-//       yield { b: 2 } 
-//       yield { c: 3 } 
-//       yield Promise.resolve({ zzz: 999 })
-//     })(),
-//   })
-//   stream
-//     .pipeTo(new WritableStream({ write(chunk) { console.log(chunk) }}))
-// })
