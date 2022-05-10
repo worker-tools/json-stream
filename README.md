@@ -160,19 +160,19 @@ While it is much more powerful and can restore arbitrary complex structures, it 
 It's best to explain by example. Assuming the data structure from above, we have:
 
 ```js
-const ctrl = new JSONParseNexus();
-const asyncData = {
-  type: ctrl.eager('$.type'),
-  items: ctrl.stream('$.items.*'),
+const parser = new JSONParseNexus();
+const data = {
+  type: parser.promise('$.type'),
+  items: parser.stream('$.items.*'),
 }
 (await fetch('/nested.json').body)
-  .pipeThrough(ctrl)  // <-- new
+  .pipeThrough(parser)  // <-- new
 
-assertEquals(await asyncData.type, 'foo')
+assertEquals(await data.type, 'foo')
 
 // We can collect the values as before:
 const collected = [];
-await asyncData.items
+await data.items
   .pipeTo(new WritableStream({ write(obj) { collected.push(obj) }}))
 ```
 
@@ -187,88 +187,59 @@ This means that memory usage can grow arbitrarily large unless the data is proce
 Take for example the following structure:
 
 ```js
-const ctrl = new JSONParseNexus();
+const parser = new JSONParseNexus();
 
 jsonStringifyStream({
   xs: new Array(10_000).fill({ x: 'x' }),
   ys: new Array(10_000).fill({ y: 'y' }),
-}).pipeThrough(ctrl)
+}).pipeThrough(parser)
 
-for await (const y of ctrl.iterable('$.ys.*')) console.log(y)
-for await (const x of ctrl.iterable('$.xs.*')) console.log(x)
+for await (const y of parser.iterable('$.ys.*')) console.log(y)
+for await (const x of parser.iterable('$.xs.*')) console.log(x)
 ```
 
 In this examples Ys are being processed before Xs, but were stringified in the opposite order. 
 This means the internal queue of Xs grows to 10.000 before it is being processed by the second loop. 
 This can be avoided by changing the order to match the stringification order.
 
-### Eager and Lazy Promises
-Special attention has to be given single values, as Promises in JS have no concept of "pulling" data. 
-`JSONParseNexus` provides two separate methods to request a single value: `.eager` and `.lazy`. 
-Both return promises that resolve with the requested value, but they differ in their effect on the internal stream: 
-The former starts pulling values from the stream immediately until the requested value is found, 
-while the later will only resolve if another consumer advances the parser's cursor beyond the point where the requested value is located. 
-
-Both approaches have their pitfalls.
-Requesting a value eager might parse an arbitrary amount of JSON, fill up queues and remove other's consumers ability to control the pace of data. 
-Requesting values lazily on the other hand might block execution entirely.
-
-TODO: Find a better solution. Perhaps pull as part of `.then` call??
+### Single Values and Lazy Promises
+Special attention has to be given single values, as Promises in JS are eager by default and have no concept of "pulling" data. 
+`JSONParseNexus` introduces a lazy promise type that has a different behavior. 
+As with async iterables and streams provided by `.iterable` and `.stream`, it does not pull values form the underlying readable until requested. This happens when `await`ing the promise, i.e. is calling the `.then` instance method, otherwise it stays idle.
 
 ```js
-const ctrl = new JSONParseNexus();
+const parser = new JSONParseNexus();
 
 jsonStringifyStream({
   type: 'items',
   items: new Array(10_000).fill({ x: 'x' }),
   trailer: 'trail',
-}).pipeThrough(ctrl)
+}).pipeThrough(parser)
 
 const data = {
-  type: ctrl.eager('$.type') // Fine
-  items: ctrl.iterable('$.items.*') // Fine
-  trailer: ctrl.lazy('$.trailer')
+  type: await parser.promise('$.type') // ok
+  items: parser.iterable('$.items.*')
+  trailer: parser.promise('$.trailer') // do not await!
 }
 
-const type = await data.type
-for await (const x of data.items) console.log(x)
-const trailer = await data.trailer.pull()
+console.log(data.type) //=> 'items'
+
+// Now async iteration is in control of parser:
+for await (const x of data.items) {
+  console.log(x)
+}
+// Now we can await the trailer:
+console.log(await data.trailer)
 ```
 
-In this example the use of `.eager` has unintended consequences. TBC
+In the above example, without lazy promises `ctrl.promise('$.trailer')` would immediately parse the entire JSON structure, which involves filling a queue of 10.000 elements.
 
-<!-- ```js
-const ctrl = new JSONParseNexus();
+In order to transform value without triggering executions, 
+the class provides a `.map` function that works similar to JS arrays:
 
-const data = {
-  type: ctrl.lazy('$.type') // Fine
-  items: ctrl.iterable('$.items.*') // Fine
-  trailer: ctrl.lazy('$.trailer') // Oh-Oh
-}
-
-jsonStringifyStream({
-  type: 'items',
-  items: new Array(10_000).fill({ x: 'x' }),
-  trailer: 'trail',
-}).pipeThrough(ctrl)
-
-const type = await data.type.pull()
-for await (const x of data.items) console.log(x)
-const trailer = await data.trailer.pull()
-``` -->
-
-
-<!-- Note that there are many pitfalls with this feature. 
-~~Internally, `.stream` and `.iterable` tee the object stream and filter for the requested JSON paths.~~
-Internally `JSONParseNexus` manages multiple queues that it fills i
-This means memory usage can grow arbitrary large if the values aren't consumed in the same order as they arrive 
-(TODO: actually, the queue grows large the main .readable isn't consumed. Could fix with some trickery. Maybe last call to `stream` doesn't tee the value?) -->
-
-<!-- ~~Note that `.promise` by itself does not pull values from the stream. If it isn't combined with `pipeTo` or similar, it will never resolve.~~
-~~If it is awaited before sufficient values have been pulled form the stream it will never resolve!~~ -->
-
-<!-- Note that the promise might resolve with `undefined` if the corresponding JSON path is not found in the stream. -->
-
+```js
+const trailer = ctrl.promise('$.trailer').map(x => x.toUpperCase())
+```
 
 ## Limitations
 **JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Environments and the browser. 
@@ -290,11 +261,11 @@ function toReadableStream<T>(iter: Iterable<T>) {
 }
 ```
 
-## Deno: Stream from Filesystem
+<!-- ## Deno: Stream from Filesystem
 When reading JSON from a file system, nothing special is required: 
 
 ```js
 new Response((await Deno.open('./nested.json')).readable, {
   headers: [['content-type', 'application/json']] 
 })
-```
+``` -->
