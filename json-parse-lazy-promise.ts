@@ -2,32 +2,59 @@
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
 import { pipe } from 'https://cdn.skypack.dev/ts-functional-pipe@3.1.2';
 
-const id = (_: any) => _;
+const id = <T = any>(_: T) => _;
 
 type Awaitable<T> = T | PromiseLike<T>;
 
-// TODO: Make own module?
-// TODO: Add abort signal?
-export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
+// FIXME: Ugh...
+class Task<T> {
   #task;
   #promise;
+  #state = 'idle'
+
+  constructor(task: () => Awaitable<T>, promise = new ResolvablePromise<T>()) {
+    this.#task = task;
+    this.#promise = promise;
+  }
+
+  execute() {
+    if (this.#state === 'idle') {
+      this.#state = 'pending'
+      this.#promise.resolve(this.#task())
+      this.#promise.then(() => { this.#state = 'fulfilled' }, () => { this.#state = 'rejected' })
+    }
+  }
+  get state() { return this.#state }
+  get promise() { return this.#promise }
+}
+
+const lock = Symbol('key');
+
+// TODO: Make own module?
+// TODO: Add abort signal?
+export class JSONParseLazyPromise<T, TT = T> implements Promise<T> {
+  #task: Task<TT>;
   #mapFn;
   #mappedPromise;
 
-  constructor(
-    task: () => Awaitable<TTask>,
-    promise = new ResolvablePromise<TTask>(),
-    mapFn?: ((value: TTask, i?: 0) => Awaitable<T>) | undefined | null,
-    thisArg?: any,
-  ) {
-    this.#task = task;
-    this.#promise = promise;
-    this.#mapFn = mapFn;
-    this.#mappedPromise = promise.then(mapFn && (x => mapFn.call(thisArg, x, 0)))
+  static from<T>(task: () => Awaitable<T>) {
+    return new JSONParseLazyPromise<T>(lock, new Task(task))
   }
 
-  #execute() {
-    this.#promise.resolve(this.#task());
+  private constructor(
+    key: symbol,
+    task: Task<TT>,
+    mapFn?: ((value: TT, i?: 0) => Awaitable<T>) | undefined | null,
+    thisArg?: any,
+  ) {
+    if (key !== lock) throw Error('Illegal constructor invocation');
+    this.#task = task;
+    this.#mapFn = mapFn;
+    this.#mappedPromise = this.#task.promise.then(mapFn && (x => mapFn.call(thisArg, x, 0)))
+  }
+
+  get state() {
+    return this.#task.state;
   }
 
   /**
@@ -38,7 +65,7 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
     onfulfilled?: ((value: T) => Awaitable<U>) | undefined | null,
     onrejected?: ((reason: any) => Awaitable<V>) | undefined | null
   ): Promise<U | V> {
-    this.#execute();
+    this.#task.execute();
     return this.#mappedPromise.then(onfulfilled, onrejected)
   }
 
@@ -49,8 +76,8 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
   map<U = T>(
     mapFn?: ((value: T, i?: 0) => Awaitable<U>) | undefined | null,
     thisArg?: any
-  ): JSONParseLazyPromise<U, TTask> {
-    return new JSONParseLazyPromise(this.#task, this.#promise, pipe(this.#mapFn ?? id, mapFn ?? id), thisArg);
+  ): JSONParseLazyPromise<U, TT> {
+    return new JSONParseLazyPromise(lock, this.#task, pipe(this.#mapFn??id, mapFn??id), thisArg);
   }
 
   catch<V = never>(onrejected?: ((reason: any) => Awaitable<V>) | null): Promise<T | V> {

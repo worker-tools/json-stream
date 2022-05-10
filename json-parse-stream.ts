@@ -78,7 +78,7 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
 
   promise<T = any>(jsonPath: string): JSONParseLazyPromise<T | undefined> {
     const stream = this.stream(jsonPath);
-    return new JSONParseLazyPromise(async () => {
+    return JSONParseLazyPromise.from(async () => {
       const x = await stream.getReader().read();
       return x.done ? undefined : x.value;
     })
