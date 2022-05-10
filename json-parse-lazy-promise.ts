@@ -27,8 +27,7 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
   }
 
   #execute() {
-    Promise.resolve(this.#task())
-      .then(x => this.#promise.resolve(x), err => this.#promise.reject(err));
+    this.#promise.resolve(this.#task());
   }
 
   /**
@@ -54,7 +53,7 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
     return new JSONParseLazyPromise(this.#task, this.#promise, pipe(this.#mapFn ?? id, mapFn ?? id), thisArg);
   }
 
-  catch<V = never>(onrejected?: ((reason: any) => V | PromiseLike<V>) | null): Promise<T | V> {
+  catch<V = never>(onrejected?: ((reason: any) => Awaitable<V>) | null): Promise<T | V> {
     // FIXME: should this also trigger execution?
     return this.#mappedPromise.catch(onrejected)
   }

@@ -39,6 +39,10 @@ await build({
     keywords: await getGHTopics(name) ?? [],
   },
   mappings: {
+    'https://cdn.skypack.dev/ts-functional-pipe@3.1.2': {
+      name: 'ts-functional-pipe',
+      version: '3.1.2',
+    },
     'https://ghuc.cc/worker-tools/resolvable-promise/index.ts': {
       name: '@worker-tools/resolvable-promise',
       version: 'latest',
