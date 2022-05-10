@@ -288,3 +288,19 @@ test('iterations throws without data source', () => {
   const items = nexus.iterable('$.items.*')
   assertRejects(() => items.next(), TypeError)
 })
+
+test('stream remains open when only promises left', async () => {
+  const nexus = new JSONParseNexus();
+
+  const stream = nexus.stream('$.items.*')
+  const type = nexus.promise('$.type')
+
+  new JSONStringifyReadable({ 
+    items: asyncGen(items), 
+    type: 'foo',
+  }).pipeThrough(nexus)
+
+  await collect(stream)
+  await timeout(10)
+  assertEquals(await type, 'foo')
+})
