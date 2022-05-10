@@ -77,6 +77,7 @@ export class JSONParseLazyPromise<T, TT = T> implements Promise<T> {
     mapFn?: ((value: T, i?: 0) => Awaitable<U>) | undefined | null,
     thisArg?: any
   ): JSONParseLazyPromise<U, TT> {
+    // @ts-ignore: types of id function (x => x) not correctly inferred...
     return new JSONParseLazyPromise(lock, this.#task, pipe(this.#mapFn??id, mapFn??id), thisArg);
   }
 
