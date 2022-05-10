@@ -79,6 +79,7 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
   promise<T = any>(jsonPath: string): JSONParseLazyPromise<T | undefined> {
     const stream = this.stream(jsonPath);
     return JSONParseLazyPromise.from(async () => {
+      if (!this.writable.locked) throw TypeError('Cannot await result while there\'s no data source.')
       const x = await stream.getReader().read();
       return x.done ? undefined : x.value;
     })
@@ -91,6 +92,7 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
         this.#queues.set(path, queue)
       },
       pull: async () => {
+        if (!this.writable.locked) throw TypeError('Cannot await result while there\'s no data source.')
         while (true) {
           const { done, value } = await this.#reader.read();
           // FIXME: avoid duplicate match

@@ -270,3 +270,21 @@ test('from file/fetch', async () => {
   assertEquals((await aCollect(fillerS)).length, 300)
   assertEquals((await aCollect(itemsS)).length, 300)
 })
+
+test('promise throws without data source', () => {
+  const nexus = new JSONParseNexus();
+  const type = nexus.promise('$.type')
+  assertRejects(() => type, TypeError)
+})
+
+test('streams throws without data source', () => {
+  const nexus = new JSONParseNexus();
+  const items = nexus.stream('$.items.*')
+  assertRejects(() => items.getReader().read(), TypeError)
+})
+
+test('iterations throws without data source', () => {
+  const nexus = new JSONParseNexus();
+  const items = nexus.iterable('$.items.*')
+  assertRejects(() => items.next(), TypeError)
+})
