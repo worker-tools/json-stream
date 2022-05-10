@@ -32,7 +32,7 @@ const check = (v: any) => {
 
 // TODO: Add replacer
 // TODO: add formatting/spaces
-// TODO: concurrent rendering
+// TODO: concurrent objects/arrays
 /**
  * @deprecated Change name to something more descriptive!? 
  */
