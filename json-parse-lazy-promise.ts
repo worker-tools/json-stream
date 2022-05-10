@@ -9,30 +9,25 @@ type Awaitable<T> = T | PromiseLike<T>;
 // TODO: Make own module?
 // TODO: Add abort signal?
 export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
-  #promise;
   #task;
+  #promise;
   #mapFn;
-  #thisArg;
-
-  // static create<U>(task: () => Awaitable<U>): JSONParseLazyPromise<U> {
-  //   this.#promise = new ResolvablePromise<T>()
-  // }
+  #mappedPromise;
 
   constructor(
     task: () => Awaitable<TTask>,
+    promise = new ResolvablePromise<TTask>(),
     mapFn?: ((value: TTask, i?: 0) => Awaitable<T>) | undefined | null,
     thisArg?: any,
   ) {
-    // FIXME: Can avoid repeated creation?
-    this.#promise = new ResolvablePromise<T>();
     this.#task = task;
+    this.#promise = promise;
     this.#mapFn = mapFn;
-    this.#thisArg = thisArg;
+    this.#mappedPromise = promise.then(mapFn && (x => mapFn.call(thisArg, x, 0)))
   }
 
-  #pull() {
+  #execute() {
     Promise.resolve(this.#task())
-      .then(this.#mapFn && (x => this.#mapFn!.call(this.#thisArg, x, 0)))
       .then(x => this.#promise.resolve(x), err => this.#promise.reject(err));
   }
 
@@ -44,8 +39,8 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
     onfulfilled?: ((value: T) => Awaitable<U>) | undefined | null,
     onrejected?: ((reason: any) => Awaitable<V>) | undefined | null
   ): Promise<U | V> {
-    this.#pull();
-    return this.#promise.then(onfulfilled, onrejected)
+    this.#execute();
+    return this.#mappedPromise.then(onfulfilled, onrejected)
   }
 
   /**
@@ -56,15 +51,17 @@ export class JSONParseLazyPromise<T, TTask = T> implements Promise<T> {
     mapFn?: ((value: T, i?: 0) => Awaitable<U>) | undefined | null,
     thisArg?: any
   ): JSONParseLazyPromise<U, TTask> {
-    return new JSONParseLazyPromise(this.#task, pipe(this.#mapFn ?? id, mapFn ?? id), thisArg)
+    return new JSONParseLazyPromise(this.#task, this.#promise, pipe(this.#mapFn ?? id, mapFn ?? id), thisArg);
   }
 
   catch<V = never>(onrejected?: ((reason: any) => V | PromiseLike<V>) | null): Promise<T | V> {
-    return this.#promise.catch(onrejected)
+    // FIXME: should this also trigger execution?
+    return this.#mappedPromise.catch(onrejected)
   }
 
   finally(onfinally?: (() => void) | null): Promise<T> {
-    return this.#promise.finally(onfinally)
+    // FIXME: should this also trigger execution?
+    return this.#mappedPromise.finally(onfinally)
   }
 
   [Symbol.toStringTag] = 'JSONParseLazyPromise'

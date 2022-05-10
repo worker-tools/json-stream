@@ -216,9 +216,9 @@ test('lazy promise map', async () => {
 
 test('lazy promise map x2', async () => {
   const nexus = new JSONParseNexus()
-  const type = nexus.promise<string>('$.type')
-    .map(x => x?.toUpperCase())
-    .map(x => `${x}!!!`)
+  const type0 = nexus.promise<string>('$.type')
+  const type1 = type0.map(x => x?.toUpperCase())
+  const type2 = type1.map(x => `${x}!!!`)
 
   let hasBeenCalled = false
   async function* asyncGen<T>(xs: T[]) {
@@ -231,8 +231,10 @@ test('lazy promise map x2', async () => {
   }).pipeThrough(nexus)
 
   assertEquals(hasBeenCalled, false)
-  assertEquals(await type, 'FOO!!!')
+  assertEquals(await type2, 'FOO!!!')
   assertEquals(hasBeenCalled, true)
+  assertEquals(await type1, 'FOO')
+  assertEquals(await type0, 'foo')
 })
 
 test('two streams', async () => {
