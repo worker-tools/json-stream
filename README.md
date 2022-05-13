@@ -1,6 +1,6 @@
 # JSON Stream
 
-Utilities for working with streaming JSON in Worker Environments such as Cloudflare Workers, Deno Deploy and Service Workers.
+Utilities for working with streaming JSON in Worker Runtimes such as Cloudflare Workers, Deno Deploy and Service Workers.
 
 ***
 
@@ -242,7 +242,7 @@ const trailer = ctrl.promise('$.trailer').map(x => x.toUpperCase())
 ```
 
 ## Limitations
-**JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Environments and the browser. 
+**JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Runtimes and the browser. 
 Currently they are not "integrated", for example specifying a specific JSON Path does not limit the amount of parsing the parser does.
 
 
