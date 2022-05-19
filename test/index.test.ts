@@ -23,8 +23,3 @@ test('stringify', () => {
   assertExists(json.jsonStringifyGenerator)
   assertExists(json.jsonStringifyStream)
 })
-
-test('nld-json', () => {
-  assertExists(json.NDJSONParseStream)
-  assertExists(json.NDJSONStringifyStream)
-})

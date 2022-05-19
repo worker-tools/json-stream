@@ -58,8 +58,3 @@ export class JSONStreamResponse extends StreamResponse {
     super(_body, { headers, ...rest });
   }
 }
-
-export type {
-  JSONStreamRequest as JSONRequest,
-  JSONStreamResponse as JSONResponse,
-}

@@ -6,51 +6,57 @@ const id = <T = any>(_: T) => _;
 
 type Awaitable<T> = T | PromiseLike<T>;
 
-// FIXME: Ugh...
+export type TaskState = 'idle' | 'pending' | 'fulfilled' | 'rejected';
+
 class Task<T> {
   #task;
   #promise;
-  #state = 'idle'
+  #state: TaskState = 'idle'
 
-  constructor(task: () => Awaitable<T>, promise = new ResolvablePromise<T>()) {
+  constructor(task: () => Awaitable<T>) {
     this.#task = task;
-    this.#promise = promise;
+    this.#promise = new ResolvablePromise<T>();
   }
 
   execute() {
     if (this.#state === 'idle') {
       this.#state = 'pending'
       this.#promise.resolve(this.#task())
-      this.#promise.then(() => { this.#state = 'fulfilled' }, () => { this.#state = 'rejected' })
+      this.#promise.then(
+        () => { this.#state = 'fulfilled' }, 
+        () => { this.#state = 'rejected' },
+      );
     }
   }
-  get state() { return this.#state }
-  get promise() { return this.#promise }
+  get state(): TaskState { return this.#state }
+  get promise(): Promise<T> { return this.#promise }
 }
 
 const lock = Symbol('key');
 
 // TODO: Make own module?
 // TODO: Add abort signal?
-export class JSONParseLazyPromise<T, TT = T> implements Promise<T> {
+// FIXME: use executor instead of task functions?
+// Remove extra type??
+export class TaskPromise<T, TT = T> implements Promise<T> {
   #task: Task<TT>;
   #mapFn;
   #mappedPromise;
 
   static from<T>(task: () => Awaitable<T>) {
-    return new JSONParseLazyPromise<T>(lock, new Task(task))
+    return new TaskPromise<T>(lock, new Task(task))
   }
 
   private constructor(
     key: symbol,
     task: Task<TT>,
-    mapFn?: ((value: TT, i?: 0) => Awaitable<T>) | undefined | null,
+    mapFn?: ((value: TT, i?: 0, p?: TaskPromise<T, TT>) => Awaitable<T>) | undefined | null,
     thisArg?: any,
   ) {
-    if (key !== lock) throw Error('Illegal constructor invocation');
+    if (key !== lock) throw Error('Illegal constructor');
     this.#task = task;
     this.#mapFn = mapFn;
-    this.#mappedPromise = this.#task.promise.then(mapFn && (x => mapFn.call(thisArg, x, 0)))
+    this.#mappedPromise = this.#task.promise.then(mapFn && (x => mapFn.call(thisArg, x, 0, this)));
   }
 
   get state() {
@@ -74,11 +80,11 @@ export class JSONParseLazyPromise<T, TT = T> implements Promise<T> {
    * Returns another lazy promise that triggers execution via `.then`
    */
   map<U = T>(
-    mapFn?: ((value: T, i?: 0) => Awaitable<U>) | undefined | null,
+    mapFn?: ((value: T, i?: 0, p?: TaskPromise<T, TT>) => Awaitable<U>) | undefined | null,
     thisArg?: any
-  ): JSONParseLazyPromise<U, TT> {
+  ): TaskPromise<U, TT> {
     // @ts-ignore: types of id function (x => x) not correctly inferred...
-    return new JSONParseLazyPromise(lock, this.#task, pipe(this.#mapFn??id, mapFn??id), thisArg);
+    return new TaskPromise(lock, this.#task, pipe(this.#mapFn??id, mapFn??id), thisArg);
   }
 
   catch<V = never>(onrejected?: ((reason: any) => Awaitable<V>) | null): Promise<T | V> {
@@ -91,5 +97,5 @@ export class JSONParseLazyPromise<T, TT = T> implements Promise<T> {
     return this.#mappedPromise.finally(onfinally)
   }
 
-  [Symbol.toStringTag] = 'JSONParseLazyPromise'
+  [Symbol.toStringTag] = 'LazyPromise'
 }

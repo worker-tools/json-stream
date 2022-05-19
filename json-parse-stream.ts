@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any no-cond-assign ban-unused-ignore no-unused-vars
 import { streamToAsyncIter } from 'https://ghuc.cc/qwtel/whatwg-stream-to-async-iter/index.ts'
 import { JSONParser } from './json-parser.js';
-import { JSONParseLazyPromise } from './json-parse-lazy-promise.ts';
+import { TaskPromise } from './task-promise.ts';
 import { normalize, match } from './json-path.ts'
 
 // FIXME: avoid string concatenation/joining
@@ -76,9 +76,9 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
     this.#reader = this.readable.getReader();
   }
 
-  promise<T = any>(jsonPath: string): JSONParseLazyPromise<T | undefined> {
+  promise<T = any>(jsonPath: string): TaskPromise<T | undefined> {
     const reader = this.stream(jsonPath).getReader();
-    return JSONParseLazyPromise.from(async () => {
+    return TaskPromise.from(async () => {
       const x = await reader.read();
       return x.done ? undefined : x.value;
     })
