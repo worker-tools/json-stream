@@ -50,7 +50,7 @@ For example this is just as valid:
 const collected = await new Response(stream).json()
 ```
 
-If on the other hand ND-JSON is sufficient for your use case, this module also provides `NDJSONStringifyStream` and `NDJSONParseStream` that work the same way as shown above, but lack the following features (TODO: move to separate module?).
+~~If on the other hand ND-JSON is sufficient for your use case, this module also provides `NDJSONStringifyStream` and `NDJSONParseStream` that work the same way as shown above, but lack the following features.~~ (TODO: make separate module?)
 
 ## Using JSON Path to locate nested data 
 __JSON Stream__ also supports more complex use cases. Assume JSON of the following structure:
@@ -245,6 +245,10 @@ const trailer = ctrl.promise('$.trailer').map(x => x.toUpperCase())
 **JSON Stream** largely consists of old Node libraries that have been modified to work in Worker Runtimes and the browser. 
 Currently they are not "integrated", for example specifying a specific JSON Path does not limit the amount of parsing the parser does.
 
+The stringification implementation, which is original, relies heavily on async generators, which are "slow" but they made the implementation easy and quick to implement.
+
+**JSON Stream** heavily relies on [`TransformStream`](https://developer.mozilla.org/en-US/docs/Web/API/TransformStream), which has only recently shipped in Chrome & Safari and is still behind a flag in Firefox. However, the latest version of Deno and Cloudflare Workers support it (might require compatibility flags in CF Workers).
+
 
 ## Appendix
 ### To ReadableStream Function
@@ -260,12 +264,3 @@ function toReadableStream<T>(iter: Iterable<T>) {
   });
 }
 ```
-
-<!-- ## Deno: Stream from Filesystem
-When reading JSON from a file system, nothing special is required: 
-
-```js
-new Response((await Deno.open('./nested.json')).readable, {
-  headers: [['content-type', 'application/json']] 
-})
-``` -->
