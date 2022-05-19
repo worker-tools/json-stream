@@ -36,8 +36,8 @@ const lock = Symbol('key');
 
 // TODO: Make own module?
 // TODO: Add abort signal?
-// FIXME: use executor instead of task functions?
-// Remove extra type??
+// TODO: use executor instead of task functions?
+// TODO: Remove TT type??
 export class TaskPromise<T, TT = T> implements Promise<T> {
   #task: Task<TT>;
   #mapFn;
@@ -64,7 +64,7 @@ export class TaskPromise<T, TT = T> implements Promise<T> {
   }
 
   /**
-   * Starts the execution of the task associated with the lazy promise.
+   * Starts the execution of the task associated with this task promise.
    * If you don't want to start the task at this moment, use `.map` instead.
    */
   then<U = T, V = never>(
@@ -77,7 +77,7 @@ export class TaskPromise<T, TT = T> implements Promise<T> {
 
   /**
    * Applies transformations to the resolved value without triggering execution.
-   * Returns another lazy promise that triggers execution via `.then`
+   * Returns another task promise that triggers execution via `.then`
    */
   map<U = T>(
     mapFn?: ((value: T, i?: 0, p?: TaskPromise<T, TT>) => Awaitable<U>) | undefined | null,
@@ -97,5 +97,5 @@ export class TaskPromise<T, TT = T> implements Promise<T> {
     return this.#mappedPromise.finally(onfinally)
   }
 
-  [Symbol.toStringTag] = 'LazyPromise'
+  readonly [Symbol.toStringTag] = 'TaskPromise'
 }
