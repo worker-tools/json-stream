@@ -25,7 +25,7 @@ export class JSONParseStream<T = any> extends TransformStream<string | Uint8Arra
 
           if (match(expr, path)) {
             controller.enqueue(value as any);
-          } else if (expr.startsWith(path)) {
+          } else if (expr.startsWith(path + ';')) {
             controller.terminate()
           }
         };
@@ -60,7 +60,7 @@ export class JSONParseNexus<T = any> extends TransformStream<string | Uint8Array
             if (match(expr, path)) {
               this.#queues.get(expr)!.enqueue(value)
             } // no else if => can both be true
-            if (expr.startsWith(path)) {
+            if (expr.startsWith(path + ';')) {
               remove(this.#queues, expr)!.close()
             }
           }
