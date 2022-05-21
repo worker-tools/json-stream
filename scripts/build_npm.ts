@@ -39,7 +39,7 @@ await build({
     keywords: await getGHTopics(name) ?? [],
   },
   mappings: {
-    'https://cdn.skypack.dev/ts-functional-pipe@3.1.2': {
+    'https://cdn.skypack.dev/ts-functional-pipe@3.1.2?dts': {
       name: 'ts-functional-pipe',
       version: '3.1.2',
     },

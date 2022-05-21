@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { ResolvablePromise } from 'https://ghuc.cc/worker-tools/resolvable-promise/index.ts';
-import { pipe } from 'https://cdn.skypack.dev/ts-functional-pipe@3.1.2';
+import { pipe } from 'https://cdn.skypack.dev/ts-functional-pipe@3.1.2?dts';
 
 const id = <T = any>(_: T) => _;
 
